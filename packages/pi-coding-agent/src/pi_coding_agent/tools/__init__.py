@@ -12,6 +12,8 @@ produce a runnable `AgentTool` are ported.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
 
 from pi_agent.types import AgentTool
 
@@ -118,4 +120,63 @@ def create_all_tools(cwd: str) -> dict[str, AgentTool]:
         "grep": create_grep_tool(cwd),
         "find": create_find_tool(cwd),
         "ls": create_ls_tool(cwd),
+    }
+
+
+@dataclass
+class BuiltInToolDefinition:
+    """The renderer half of a built-in tool.
+
+    Port of the `ToolDefinition` objects `createAllToolDefinitions` returns
+    (`core/tools/index.ts:156`). `ToolExecutionComponent` looks these up by
+    tool name and calls `render_call`/`render_result`; without them every
+    built-in tool falls back to the generic renderer, which is why read output
+    had no title line, no highlighting and no collapsed form.
+
+    Kept separate from `AgentTool` because `pi_agent.types.AgentTool` is the
+    execution contract and carries no display concerns.
+    """
+
+    render_call: Callable[..., Any] | None = None
+    render_result: Callable[..., Any] | None = None
+    render_shell: str | None = None
+
+
+def create_all_tool_definitions(cwd: str) -> dict[str, BuiltInToolDefinition]:
+    """Renderer definitions for the built-in tools, keyed by name.
+
+    Port of `createAllToolDefinitions`. Only tools whose renderers are ported
+    appear here; a missing entry leaves that tool on the generic renderer,
+    which is the same fallback upstream uses for tools without renderers.
+    """
+    from pi_tui.components.text import Text
+
+    from pi_coding_agent.tools.read import format_read_call, format_read_result
+
+    def _text_component(context: Any) -> Any:
+        existing = getattr(context, "last_component", None)
+        return existing if isinstance(existing, Text) else Text("", 0, 0)
+
+    def read_render_call(args: Any, theme: Any, context: Any) -> Any:
+        component = _text_component(context)
+        component.set_text(format_read_call(args, theme, getattr(context, "cwd", cwd)))
+        return component
+
+    def read_render_result(result: Any, options: Any, theme: Any, context: Any) -> Any:
+        component = _text_component(context)
+        component.set_text(
+            format_read_result(
+                getattr(context, "args", None),
+                result,
+                options,
+                theme,
+                getattr(context, "show_images", False),
+                getattr(context, "cwd", cwd),
+                getattr(context, "is_error", False),
+            )
+        )
+        return component
+
+    return {
+        "read": BuiltInToolDefinition(render_call=read_render_call, render_result=read_render_result),
     }

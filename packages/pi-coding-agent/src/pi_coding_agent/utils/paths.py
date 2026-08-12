@@ -138,6 +138,18 @@ def resolve_path(input_path: str, base_dir: str | None = None, options: PathInpu
     return os.path.normpath(os.path.join(normalized_base, normalized))
 
 
+def format_path_relative_to_cwd_or_absolute(file_path: str, cwd: str) -> str:
+    """Display form of a path: cwd-relative when inside `cwd`, else absolute.
+
+    Port of `formatPathRelativeToCwdOrAbsolute` (`utils/paths.ts:119`). Always
+    POSIX-separated, because the result goes into rendered tool output where
+    upstream normalises separators.
+    """
+    absolute_path = resolve_path(file_path, cwd)
+    display = get_cwd_relative_path(absolute_path, cwd) or absolute_path
+    return display.replace(os.sep, "/")
+
+
 def get_cwd_relative_path(file_path: str, cwd: str) -> str | None:
     """``file_path`` relative to ``cwd``, or `None` when it escapes ``cwd``.
 

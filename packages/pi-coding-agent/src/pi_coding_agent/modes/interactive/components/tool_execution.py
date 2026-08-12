@@ -106,6 +106,13 @@ class ToolExecutionComponent(Container):
         self.tool_call_id = tool_call_id
         self.args = args
         self.tool_definition = tool_definition
+        if built_in_tool_definition is None:
+            # `interactive-mode.ts`'s component looks the built-in renderers up
+            # by tool name (`tool-execution.ts:57`) rather than having them
+            # threaded in, so every call site gets them without changing.
+            from pi_coding_agent.tools import create_all_tool_definitions
+
+            built_in_tool_definition = create_all_tool_definitions(cwd).get(tool_name)
         self.built_in_tool_definition = built_in_tool_definition
         self.show_images = True if options.show_images is None else options.show_images
         self.image_width_cells = 60 if options.image_width_cells is None else options.image_width_cells

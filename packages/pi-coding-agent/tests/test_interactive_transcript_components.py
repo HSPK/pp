@@ -330,14 +330,28 @@ def test_shorten_path_handles_non_strings():
 
 
 def test_tool_execution_renders_name_and_arguments():
-    component = ToolExecutionComponent("read", "call-1", {"path": "/x.py"}, cwd="/tmp")
+    """The generic fallback, used for any tool without a built-in renderer.
+
+    Deliberately not `read`: `read` now has a ported renderer that prints
+    `read <path>` instead of the raw argument JSON, so using it here would
+    test the renderer rather than the fallback.
+    """
+    component = ToolExecutionComponent("no_such_tool", "call-1", {"path": "/x.py"}, cwd="/tmp")
     rendered = "\n".join(_stripped(component.render(40)))
-    assert "read" in rendered
+    assert "no_such_tool" in rendered
     assert '"path": "/x.py"' in rendered
 
 
+def test_built_in_read_renders_through_its_own_renderer():
+    """Port of `formatReadCall`: a title line, not the argument JSON."""
+    component = ToolExecutionComponent("read", "call-1", {"path": "/x.py"}, cwd="/tmp")
+    rendered = "\n".join(_stripped(component.render(40)))
+    assert "read /x.py" in rendered
+    assert '"path"' not in rendered
+
+
 def test_tool_execution_appends_text_output():
-    component = ToolExecutionComponent("read", "call-1", {}, cwd="/tmp")
+    component = ToolExecutionComponent("no_such_tool", "call-1", {}, cwd="/tmp")
     component.update_result(ToolResult(content=[{"type": "text", "text": "body"}]))
     assert "body" in "\n".join(_stripped(component.render(40)))
 
