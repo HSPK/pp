@@ -1556,7 +1556,9 @@ async def example() -> None:
     claude = models.get_model("anthropic", "claude-sonnet-4-5")
     assert claude is not None
     context.messages.append(UserMessage(content="What is 25 * 18?", timestamp=now_ms()))
-    context.messages.append(await complete(await models.stream_simple(claude, context, SimpleStreamOptions(reasoning="medium"))))
+    context.messages.append(
+        await complete(await models.stream_simple(claude, context, SimpleStreamOptions(reasoning="medium")))
+    )
 
     gpt5 = models.get_model("openai", "gpt-5-mini")
     assert gpt5 is not None

@@ -48,14 +48,15 @@ The real coding-agent service boundary lives in `pi_coding_agent.core.agent_sess
 Custom transports can use `pi_server.testing` for deterministic protocol conformance tests. It exports `create_test_server()`, `TestServerService`, `TestSessionRuntime`, `ProtocolTestClient`, and the transport-neutral `WireChannel` contract. `connect_unix_test_client()` is provided for Unix transport tests.
 
 ```python
+from pi_server import PiServerOptions
 from pi_server.testing import TestServerService, create_test_server
 
 
 async def main() -> None:
     service = TestServerService()
-    server = create_test_server(service)
-    await server.start()
-    await server.close()
+    harness = create_test_server(PiServerOptions(listeners=[]), service)
+    await harness.server.start()
+    await harness.server.close()
 ```
 
 ## `pi-ai` protocol bridge
