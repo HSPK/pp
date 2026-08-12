@@ -177,6 +177,31 @@ def create_all_tool_definitions(cwd: str) -> dict[str, BuiltInToolDefinition]:
         )
         return component
 
+    from pi_coding_agent.tools.bash import format_bash_call, format_bash_result_lines
+
+    def bash_render_call(args: Any, theme: Any, context: Any) -> Any:
+        component = _text_component(context)
+        component.set_text(format_bash_call(args, theme))
+        return component
+
+    def bash_render_result(result: Any, options: Any, theme: Any, context: Any) -> Any:
+        component = _text_component(context)
+        state = getattr(context, "state", {}) or {}
+        component.set_text(
+            "\n".join(
+                format_bash_result_lines(
+                    result,
+                    options,
+                    theme,
+                    getattr(context, "show_images", False),
+                    state.get("started_at"),
+                    state.get("ended_at"),
+                )
+            )
+        )
+        return component
+
     return {
         "read": BuiltInToolDefinition(render_call=read_render_call, render_result=read_render_result),
+        "bash": BuiltInToolDefinition(render_call=bash_render_call, render_result=bash_render_result),
     }

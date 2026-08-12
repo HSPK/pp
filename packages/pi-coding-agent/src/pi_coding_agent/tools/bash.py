@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pi_agent.types import AgentTool, AgentToolResult
-from pi_ai.types import TextContent
+from pi_ai.types import TextContent, now_ms
 from pi_ai.utils.abort import AbortSignal
 
 from pi_coding_agent.tools.output_accumulator import OutputAccumulator
@@ -449,3 +449,111 @@ def create_bash_tool(
         execute=execute,
         prompt_guidelines=list(BASH_PROMPT_GUIDELINES) if expose_session_environment else [],
     )
+
+
+# --------------------------------------------------------------------------
+# Rendering
+#
+# Port of `bash.ts`'s `formatBashCall` and `rebuildBashResultRenderComponent`.
+# Unlike `read`, a collapsed bash result is not empty: it previews the *last*
+# few lines, because what a command just printed is usually what matters.
+# --------------------------------------------------------------------------
+
+BASH_PREVIEW_LINES = 5
+
+
+def format_duration(ms: float) -> str:
+    """Port of bash.ts's `formatDuration`: one decimal, seconds."""
+    return f"{ms / 1000:.1f}s"
+
+
+def format_bash_call(args: Any, theme: Any) -> str:
+    """Port of `formatBashCall`."""
+    from pi_coding_agent.tools.render_utils import invalid_arg_text, str_arg
+
+    a = args if isinstance(args, dict) else {}
+    command = str_arg(a.get("command"))
+    timeout = a.get("timeout")
+    timeout_suffix = theme.fg("muted", f" (timeout {timeout}s)") if timeout else ""
+    if command is None:
+        command_display = invalid_arg_text(theme)
+    elif command:
+        command_display = command
+    else:
+        command_display = theme.fg("toolOutput", "...")
+    return theme.fg("toolTitle", theme.bold(f"$ {command_display}")) + timeout_suffix
+
+
+def format_bash_result_lines(
+    result: Any, options: Any, theme: Any, show_images: bool, started_at: float | None, ended_at: float | None
+) -> list[str]:
+    """Rendered lines for a bash result. Port of `rebuildBashResultRenderComponent`.
+
+    Returns lines rather than components: this port's renderer hook hands back a
+    single `Text`, and the upstream component tree exists only to cache the
+    collapsed preview per width.
+    """
+    from pi_coding_agent.modes.interactive.components.keybinding_hints import key_hint
+    from pi_coding_agent.modes.interactive.components.visual_truncate import truncate_to_visual_lines
+    from pi_coding_agent.tools.render_utils import get_text_output
+
+    expanded = bool(getattr(options, "expanded", False))
+    is_partial = bool(getattr(options, "is_partial", False))
+    details = getattr(result, "details", None)
+    truncation = getattr(details, "truncation", None)
+    full_output_path = getattr(details, "full_output_path", None)
+
+    output = get_text_output(result, show_images).strip()
+    if (
+        not is_partial
+        and truncation is not None
+        and getattr(truncation, "truncated", False)
+        and full_output_path
+        and output.endswith("]")
+    ):
+        # Upstream drops the "[Full output: ...]" footer the tool already
+        # appended, because the same information is re-rendered below as a
+        # styled warning; leaving both shows it twice.
+        footer_start = output.rfind("\n\n[")
+        if footer_start != -1 and full_output_path in output[footer_start:]:
+            output = output[:footer_start].rstrip()
+
+    lines: list[str] = []
+    if output:
+        styled = "\n".join(theme.fg("toolOutput", line) for line in output.split("\n"))
+        if expanded:
+            lines.append("")
+            lines.extend(styled.split("\n"))
+        else:
+            preview = truncate_to_visual_lines(styled, BASH_PREVIEW_LINES, 80)
+            lines.append("")
+            if preview.skipped_count:
+                hint = (
+                    theme.fg("muted", f"... ({preview.skipped_count} earlier lines,")
+                    + " "
+                    + key_hint("app.tools.expand", "to expand")
+                    + theme.fg("muted", ")")
+                )
+                lines.append(hint)
+            lines.extend(preview.visual_lines)
+
+    if (truncation is not None and getattr(truncation, "truncated", False)) or full_output_path:
+        warnings: list[str] = []
+        if full_output_path:
+            warnings.append(f"Full output: {full_output_path}")
+        if truncation is not None and getattr(truncation, "truncated", False):
+            if getattr(truncation, "truncated_by", None) == "lines":
+                warnings.append(f"Truncated: showing {truncation.output_lines} of {truncation.total_lines} lines")
+            else:
+                max_bytes = getattr(truncation, "max_bytes", None) or DEFAULT_MAX_BYTES
+                warnings.append(f"Truncated: {truncation.output_lines} lines shown ({format_size(max_bytes)} limit)")
+        lines.append("")
+        lines.append(theme.fg("warning", f"[{'. '.join(warnings)}]"))
+
+    if started_at is not None:
+        label = "Elapsed" if is_partial else "Took"
+        end_time = ended_at if ended_at is not None else now_ms()
+        lines.append("")
+        lines.append(theme.fg("muted", f"{label} {format_duration(end_time - started_at)}"))
+
+    return lines
