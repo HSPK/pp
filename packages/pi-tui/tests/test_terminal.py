@@ -82,6 +82,21 @@ def _setup_negotiation() -> tuple[ProcessTerminal, FakeTerminalIo, list[str]]:
     return terminal, io, received
 
 
+@pytest.fixture(autouse=True)
+def _pin_escape_timeout(monkeypatch: pytest.MonkeyPatch):
+    """Pin the escape-reassembly window to the local-terminal default.
+
+    These cases mirror upstream's `mock.timers.tick(10)` / `tick(150)` pairs,
+    which assume the 10 ms default. `resolve_escape_timeout_ms` returns 100 ms
+    when `SSH_CONNECTION`/`SSH_TTY` are set, so on a machine reached over SSH
+    the timings would silently stop matching the TypeScript they were ported
+    from -- the test would be measuring the environment, not the code.
+    """
+    monkeypatch.delenv("SSH_CONNECTION", raising=False)
+    monkeypatch.delenv("SSH_TTY", raising=False)
+    monkeypatch.delenv("PI_TUI_ESC_TIMEOUT", raising=False)
+
+
 class TestKittyKeyboardProtocolNegotiation:
     @pytest.mark.asyncio
     async def test_queries_kitty_mode_before_modify_other_keys_fallback(self) -> None:

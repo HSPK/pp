@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import codecs
 import contextlib
+import math
 import os
 import re
 import sys
@@ -309,6 +310,36 @@ def _compute_write_log_path(environ: Mapping[str, str], pid: int) -> str:
     return env
 
 
+DEFAULT_ESCAPE_TIMEOUT_MS = 10
+DEFAULT_SSH_ESCAPE_TIMEOUT_MS = 100
+
+
+def resolve_escape_timeout_ms(env: Mapping[str, str] | None = None) -> int:
+    """How long to wait for the rest of an escape sequence before treating a
+    lone ESC as the Escape key.
+
+    Port of `resolveEscapeTimeoutMs` (`terminal.ts:112`). Legacy Alt+key input
+    arrives as ESC followed by another byte, so a high-latency transport needs
+    a longer reassembly window or every Alt+key is misread as a bare Escape.
+    This port previously hard-coded 10 ms, which is exactly the case that
+    breaks over SSH.
+    """
+    source = os.environ if env is None else env
+    configured = source.get("PI_TUI_ESC_TIMEOUT")
+    if configured is not None:
+        try:
+            value = float(configured)
+        except ValueError:
+            value = 0.0
+        # `Number.isFinite` upstream: NaN and infinities fall through to the
+        # defaults rather than becoming the timeout.
+        if math.isfinite(value) and value > 0:
+            return int(value)
+    if source.get("SSH_CONNECTION") or source.get("SSH_TTY"):
+        return DEFAULT_SSH_ESCAPE_TIMEOUT_MS
+    return DEFAULT_ESCAPE_TIMEOUT_MS
+
+
 class ProcessTerminal:
     """Real terminal, driven through an injected `TerminalIo`."""
 
@@ -356,7 +387,7 @@ class ProcessTerminal:
             self._resize_handler()
 
     def _setup_stdin_buffer(self) -> None:
-        self._stdin_buffer = StdinBuffer(timeout=0.01)
+        self._stdin_buffer = StdinBuffer(timeout=resolve_escape_timeout_ms() / 1000)
         self._stdin_buffer.on("data", self._on_stdin_buffer_data)
         self._stdin_buffer.on("paste", self._on_stdin_buffer_paste)
 
