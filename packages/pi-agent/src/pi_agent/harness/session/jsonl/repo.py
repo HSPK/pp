@@ -70,6 +70,25 @@ class _Destination:
     cwd: str
 
 
+async def list_jsonl_session_metadata(
+    options: JsonlSessionRepoOptions, query: JsonlSessionListOptions | None = None
+) -> list[JsonlSessionMetadata]:
+    """Module-level session listing, port of `listJsonlSessionMetadata`.
+
+    Upstream lifted this out of the repo class so callers can enumerate
+    sessions without constructing one (`jsonl/repo.ts:65`). The behaviour is
+    the repo's own listing; this is the same code path, not a second one.
+    """
+    return await JsonlSessionRepo(options)._list_direct(query or JsonlSessionListOptions())
+
+
+async def load_jsonl_session_storage(
+    options: JsonlSessionRepoOptions, metadata: JsonlSessionMetadata
+) -> JsonlSessionStorage:
+    """Module-level storage load, port of `loadJsonlSessionStorage` (`jsonl/repo.ts:89`)."""
+    return await JsonlSessionRepo(options)._load_storage(metadata)
+
+
 class JsonlSessionRepo:
     def __init__(self, options: JsonlSessionRepoOptions) -> None:
         self._sessions_root_input = options.sessions_root

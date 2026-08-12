@@ -52,7 +52,7 @@ from ..utils.json_parse import parse_json_with_repair
 from ..utils.json_stringify import json_stringify
 from ..utils.provider_retry import ProviderRetryOptions, retry_provider_request
 from ..utils.sanitize_unicode import sanitize_surrogates
-from .constrained_sampling import resolve_json_schema_strict_sampling
+from .constrained_sampling import get_json_schema_tool_parameters, resolve_json_schema_strict_sampling
 from .transform_messages import transform_messages
 
 T = TypeVar("T")
@@ -332,7 +332,9 @@ def _sanitize_for_openapi(schema: Any) -> Any:
     }
 
 
-def convert_tools(tools: list[Tool], use_parameters: bool = False) -> list[dict[str, Any]] | None:
+def convert_tools(
+    tools: list[Tool], use_parameters: bool = False, supports_strict_mode: bool = True
+) -> list[dict[str, Any]] | None:
     """Convert tools to Gemini function declarations format.
 
     By default uses `parametersJsonSchema`, which supports full JSON Schema
@@ -345,11 +347,15 @@ def convert_tools(tools: list[Tool], use_parameters: bool = False) -> list[dict[
         return None
     declarations = []
     for tool in tools:
+        strict = resolve_json_schema_strict_sampling(tool, supports_strict_mode)
+        # `getJsonSchemaToolParameters` upstream (`google-shared.ts:295`): under
+        # strict sampling Gemini gets the strict subset, not the raw schema.
+        parameters = get_json_schema_tool_parameters(tool, strict)
         declaration: dict[str, Any] = {"name": tool.name, "description": tool.description}
         if use_parameters:
-            declaration["parameters"] = _sanitize_for_openapi(tool.parameters)
+            declaration["parameters"] = _sanitize_for_openapi(parameters)
         else:
-            declaration["parametersJsonSchema"] = tool.parameters
+            declaration["parametersJsonSchema"] = parameters
         declarations.append(declaration)
     return [{"functionDeclarations": declarations}]
 

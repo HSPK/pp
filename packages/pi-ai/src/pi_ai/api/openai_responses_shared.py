@@ -44,6 +44,7 @@ from .constrained_sampling import (
     GrammarToolInputJsonBuffer,
     append_grammar_tool_input_json_delta,
     get_grammar_tool_input,
+    get_json_schema_tool_parameters,
     resolve_grammar_constrained_sampling,
     resolve_json_schema_strict_sampling,
 )
@@ -390,7 +391,9 @@ def convert_responses_tools(
             "type": "function",
             "name": tool.name,
             "description": tool.description,
-            "parameters": tool.parameters,
+            # `getJsonSchemaToolParameters(tool, strict === true)` upstream: the
+            # strict subset, not the raw schema.
+            "parameters": get_json_schema_tool_parameters(tool, constrained_strict is True),
         }
         if options.defer_loading:
             function_tool["defer_loading"] = True

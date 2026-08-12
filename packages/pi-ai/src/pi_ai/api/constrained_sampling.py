@@ -6,6 +6,7 @@ Python port of `packages/ai/src/api/constrained-sampling.ts`.
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -141,3 +142,132 @@ def create_grammar_tool_input_properties(
         if grammar is not None:
             properties[tool.name] = grammar.input_property
     return properties
+
+
+_MISSING = object()
+
+
+class UnsupportedStrictJsonSchemaError(Exception):
+    """A tool schema that cannot be expressed in the strict subset."""
+
+
+_UNSUPPORTED_STRICT_SCHEMA_KEYS = (
+    "$ref",
+    "$defs",
+    "definitions",
+    "allOf",
+    "oneOf",
+    "patternProperties",
+    "dependentSchemas",
+    "dependencies",
+    "unevaluatedProperties",
+    "propertyNames",
+    "contains",
+    "prefixItems",
+    "not",
+    "if",
+    "then",
+    "else",
+)
+
+
+def _is_json_schema_object(value: Any) -> bool:
+    return isinstance(value, dict)
+
+
+def _is_structured_schema(schema: Any) -> bool:
+    if not _is_json_schema_object(schema):
+        return False
+    raw = schema.get("type")
+    types = [raw] if isinstance(raw, str) else (raw if isinstance(raw, list) else [])
+    return "object" in types or "array" in types or "properties" in schema or "items" in schema
+
+
+def _schema_allows_null(schema: Any) -> bool:
+    if not _is_json_schema_object(schema):
+        return False
+    raw = schema.get("type")
+    if raw == "null" or (isinstance(raw, list) and "null" in raw):
+        return True
+    if schema.get("const", _MISSING) is None:
+        return True
+    enum = schema.get("enum")
+    if isinstance(enum, list) and None in enum:
+        return True
+    any_of = schema.get("anyOf")
+    return isinstance(any_of, list) and any(_schema_allows_null(v) for v in any_of)
+
+
+def _make_json_schema_node_strict(schema: Any) -> None:
+    if not _is_json_schema_object(schema):
+        raise UnsupportedStrictJsonSchemaError("boolean schemas are unsupported")
+    for key in _UNSUPPORTED_STRICT_SCHEMA_KEYS:
+        if schema.get(key) is not None:
+            raise UnsupportedStrictJsonSchemaError(f"{key} schemas are unsupported")
+
+    any_of = schema.get("anyOf")
+    if any_of is not None:
+        if not isinstance(any_of, list) or not any_of:
+            raise UnsupportedStrictJsonSchemaError("anyOf must contain at least one schema")
+        for variant in any_of:
+            if _is_structured_schema(variant):
+                raise UnsupportedStrictJsonSchemaError("object and array unions are unsupported")
+            _make_json_schema_node_strict(variant)
+
+    items = schema.get("items")
+    if items is not None:
+        if isinstance(items, list):
+            raise UnsupportedStrictJsonSchemaError("tuple schemas are unsupported")
+        _make_json_schema_node_strict(items)
+
+    is_object_schema = schema.get("type") == "object"
+    if schema.get("properties") is not None and not is_object_schema:
+        raise UnsupportedStrictJsonSchemaError("properties require type object")
+    if not is_object_schema:
+        return
+    additional = schema.get("additionalProperties", _MISSING)
+    if additional is not _MISSING and additional is not False:
+        raise UnsupportedStrictJsonSchemaError("schema-valued or true additionalProperties is unsupported")
+    properties = schema.get("properties")
+    if properties is not None and not _is_json_schema_object(properties):
+        raise UnsupportedStrictJsonSchemaError("object properties must be a schema map")
+    required_raw = schema.get("required")
+    if required_raw is not None and (
+        not isinstance(required_raw, list) or any(not isinstance(k, str) for k in required_raw)
+    ):
+        raise UnsupportedStrictJsonSchemaError("object required must be a string array")
+
+    properties = properties if properties is not None else {}
+    property_names = list(properties.keys())
+    required = set(required_raw) if isinstance(required_raw, list) else set()
+    if any(key not in property_names for key in required):
+        raise UnsupportedStrictJsonSchemaError("required contains an unknown property")
+    for key, prop in list(properties.items()):
+        _make_json_schema_node_strict(prop)
+        if key not in required and not _schema_allows_null(prop):
+            # Optional properties become nullable instead of optional, because
+            # strict mode requires every property to be listed in `required`.
+            properties[key] = {"anyOf": [prop, {"type": "null"}]}
+    schema["required"] = property_names
+    schema["additionalProperties"] = False
+
+
+def make_strict_json_schema(schema: Any) -> dict[str, Any]:
+    """Convert a tool schema to the strict subset provider constrained sampling expects.
+
+    Port of `makeStrictJsonSchema` (`api/constrained-sampling.ts:117`). Works on
+    a deep copy: the tool's own `parameters` must not be mutated, since the same
+    `Tool` object is reused across requests.
+    """
+    cloned = deepcopy(schema)
+    if not _is_json_schema_object(cloned):
+        raise UnsupportedStrictJsonSchemaError("root schema must have type object")
+    _make_json_schema_node_strict(cloned)
+    if cloned.get("type") != "object":
+        raise UnsupportedStrictJsonSchemaError("root schema must have type object")
+    return cloned
+
+
+def get_json_schema_tool_parameters(tool: Tool, strict: bool | None) -> Any:
+    """Port of `getJsonSchemaToolParameters`. Only `strict is True` transforms."""
+    return make_strict_json_schema(tool.parameters) if strict is True else tool.parameters

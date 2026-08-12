@@ -58,7 +58,7 @@ from ..utils.json_parse import parse_json_with_repair, parse_streaming_json
 from ..utils.provider_env import get_provider_env_value
 from ..utils.sanitize_unicode import sanitize_surrogates
 from ..utils.tasks import spawn
-from .constrained_sampling import resolve_json_schema_strict_sampling
+from .constrained_sampling import get_json_schema_tool_parameters, resolve_json_schema_strict_sampling
 from .github_copilot_headers import build_copilot_dynamic_headers, has_copilot_vision_input
 from .simple_options import (
     adjust_max_tokens_for_thinking,
@@ -621,13 +621,17 @@ def convert_tools(
     last_index = len(tools) - 1
     for index, tool in enumerate(tools):
         strict = resolve_json_schema_strict_sampling(tool, supports_strict_tools)
-        schema = tool.parameters
+        # `getJsonSchemaToolParameters` (`constrained-sampling.ts:129`): under
+        # strict sampling the schema must first be narrowed to the strict
+        # subset. Using the raw `tool.parameters` here sent providers a schema
+        # they reject when strict mode is on.
+        parameters = get_json_schema_tool_parameters(tool, strict)
         legacy_input_schema = {
             "type": "object",
-            "properties": schema.get("properties", {}),
-            "required": schema.get("required", []),
+            "properties": parameters.get("properties", {}),
+            "required": parameters.get("required", []),
         }
-        input_schema = {**tool.parameters, **legacy_input_schema} if strict is True else legacy_input_schema
+        input_schema = {**parameters, **legacy_input_schema} if strict is True else legacy_input_schema
 
         entry: dict[str, Any] = {
             "name": to_claude_code_name(tool.name) if is_oauth_token else tool.name,

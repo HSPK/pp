@@ -478,3 +478,44 @@ async def test_does_not_advance_state_or_poison_the_write_queue_after_an_append_
 
     reopened = await create_repository(root).open(await session.get_metadata())
     assert await reopened.get_log() == [LogEntryItem(seq=1, entry=committed)]
+
+
+async def test_module_level_listing_and_loading_match_the_repo(tmp_path):
+    """Port of `listJsonlSessionMetadata` / `loadJsonlSessionStorage`.
+
+    Upstream lifted both out of `JsonlSessionRepo` so a caller can enumerate and
+    open sessions without constructing a repo (`jsonl/repo.ts:65,89`). They must
+    stay the same code path as the repo methods, not a parallel implementation
+    that can drift.
+    """
+    from pi_agent.harness.session.jsonl.repo import (
+        list_jsonl_session_metadata,
+        load_jsonl_session_storage,
+    )
+
+    options = JsonlSessionRepoOptions(sessions_root=str(tmp_path))
+    repo = JsonlSessionRepo(options)
+    await repo.create(JsonlSessionCreateOptions(cwd=str(tmp_path)))
+
+    listed = await list_jsonl_session_metadata(options)
+    via_repo = await repo.list()
+
+    assert [m.id for m in listed] == [m.id for m in via_repo]
+    assert len(listed) == 1
+
+    storage = await load_jsonl_session_storage(options, listed[0])
+    assert (await storage.get_metadata()).id == listed[0].id
+
+
+async def test_loading_a_missing_session_raises_not_found(tmp_path):
+    from pi_agent.harness.session.jsonl.repo import load_jsonl_session_storage
+
+    options = JsonlSessionRepoOptions(sessions_root=str(tmp_path))
+    repo = JsonlSessionRepo(options)
+    await repo.create(JsonlSessionCreateOptions(cwd=str(tmp_path)))
+    metadata = (await repo.list())[0]
+    Path(metadata.path).unlink()
+
+    with pytest.raises(SessionError) as excinfo:
+        await load_jsonl_session_storage(options, metadata)
+    assert excinfo.value.code == "not_found"

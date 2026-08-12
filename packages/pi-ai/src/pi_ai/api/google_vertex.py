@@ -253,7 +253,7 @@ def build_params(model: Model, context: Context, options: GoogleVertexOptions | 
     if context.system_prompt:
         body["systemInstruction"] = {"parts": [{"text": sanitize_surrogates(context.system_prompt)}]}
     if context.tools:
-        tools = convert_tools(context.tools)
+        tools = convert_tools(context.tools, False, supports_google_strict_tool_sampling(model.id))
         if tools:
             body["tools"] = tools
         function_calling_mode = resolve_google_function_calling_mode(

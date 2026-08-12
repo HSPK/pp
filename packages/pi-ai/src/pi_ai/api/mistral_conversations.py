@@ -57,7 +57,7 @@ from ..utils.json_parse import parse_streaming_json
 from ..utils.json_stringify import json_stringify
 from ..utils.sanitize_unicode import sanitize_surrogates
 from ..utils.tasks import spawn
-from .constrained_sampling import resolve_json_schema_strict_sampling
+from .constrained_sampling import get_json_schema_tool_parameters, resolve_json_schema_strict_sampling
 from .simple_options import as_provider_options, build_base_options
 from .transform_messages import transform_messages
 
@@ -681,7 +681,7 @@ def to_function_tools(tools: list[Tool]) -> list[dict[str, Any]]:
                     "description": tool.description,
                     # No `stripSymbolKeys` equivalent needed: Python dict keys are
                     # always strings, unlike JS objects which can carry Symbol keys.
-                    "parameters": tool.parameters,
+                    "parameters": get_json_schema_tool_parameters(tool, strict),
                     "strict": bool(strict) if strict is not None else False,
                 },
             }
