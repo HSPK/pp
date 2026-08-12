@@ -1106,3 +1106,158 @@ __all__ = [
     "theme",
     "with_theme_color_fallbacks",
 ]
+
+
+# --------------------------------------------------------------------------
+# Syntax highlighting
+#
+# Port of `highlightCode` / `getLanguageFromPath` (`theme.ts:1179`, `:1203`).
+# TypeScript highlights through `cli-highlight` (highlight.js); this port uses
+# Pygments, which is already in the dependency tree. What matters for parity is
+# not the tokenizer but that token colours come from the *active theme*'s
+# `syntax*` entries rather than a library default palette -- that is what makes
+# highlighted code match the rest of the UI when the user switches themes.
+# --------------------------------------------------------------------------
+
+_EXT_TO_LANG: dict[str, str] = {
+    "ts": "typescript",
+    "tsx": "typescript",
+    "js": "javascript",
+    "jsx": "javascript",
+    "mjs": "javascript",
+    "cjs": "javascript",
+    "py": "python",
+    "rb": "ruby",
+    "rs": "rust",
+    "go": "go",
+    "java": "java",
+    "kt": "kotlin",
+    "swift": "swift",
+    "c": "c",
+    "h": "c",
+    "cpp": "cpp",
+    "cc": "cpp",
+    "cxx": "cpp",
+    "hpp": "cpp",
+    "cs": "csharp",
+    "php": "php",
+    "sh": "bash",
+    "bash": "bash",
+    "zsh": "bash",
+    "fish": "fish",
+    "ps1": "powershell",
+    "sql": "sql",
+    "html": "html",
+    "htm": "html",
+    "css": "css",
+    "scss": "scss",
+    "sass": "sass",
+    "less": "less",
+    "json": "json",
+    "yaml": "yaml",
+    "yml": "yaml",
+    "toml": "toml",
+    "xml": "xml",
+    "md": "markdown",
+    "markdown": "markdown",
+    "dockerfile": "dockerfile",
+    "makefile": "makefile",
+    "cmake": "cmake",
+    "lua": "lua",
+    "perl": "perl",
+    "r": "r",
+    "scala": "scala",
+    "clj": "clojure",
+    "ex": "elixir",
+    "exs": "elixir",
+    "erl": "erlang",
+    "hs": "haskell",
+    "ml": "ocaml",
+    "vim": "vim",
+    "graphql": "graphql",
+    "proto": "protobuf",
+    "tf": "hcl",
+    "hcl": "hcl",
+}
+
+
+def get_language_from_path(file_path: str) -> str | None:
+    """Language id for a path's extension. Port of `getLanguageFromPath`."""
+    if "." not in file_path:
+        return None
+    ext = file_path.split(".")[-1].lower()
+    return _EXT_TO_LANG.get(ext)
+
+
+def _theme_color_for_token(token: object) -> str | None:
+    """Map a Pygments token to a theme colour key.
+
+    Mirrors `buildCliHighlightTheme` (`theme.ts:1137`), which maps
+    highlight.js scopes onto the same `syntax*` theme entries. Walks up the
+    token hierarchy so specific tokens (`Token.Literal.String.Double`) inherit
+    their parent's colour.
+    """
+    from pygments.token import Comment, Error, Keyword, Name, Number, Operator, Punctuation, String
+
+    mapping = [
+        (Comment, "syntaxComment"),
+        (String, "syntaxString"),
+        (Number, "syntaxNumber"),
+        (Keyword.Type, "syntaxType"),
+        (Name.Class, "syntaxType"),
+        (Name.Builtin, "syntaxType"),
+        (Name.Function, "syntaxFunction"),
+        (Name.Decorator, "syntaxFunction"),
+        (Keyword, "syntaxKeyword"),
+        (Name.Variable, "syntaxVariable"),
+        (Name.Attribute, "syntaxVariable"),
+        (Operator, "syntaxOperator"),
+        (Punctuation, "syntaxPunctuation"),
+        (Error, "error"),
+    ]
+    for token_type, color in mapping:
+        if token in token_type:
+            return color
+    return None
+
+
+def highlight_code(code: str, lang: str | None = None) -> list[str]:
+    """Highlight `code`, returning one string per line. Port of `highlightCode`.
+
+    With no usable language the lines come back tinted `mdCodeBlock` rather
+    than auto-detected: upstream disables auto-detection because it misreads
+    prose as code and colours random English words as keywords.
+    """
+    if not lang:
+        return [theme.fg("mdCodeBlock", line) for line in code.split("\n")]
+
+    try:
+        from pygments import lex
+        from pygments.lexers import get_lexer_by_name
+    except ImportError:  # pragma: no cover - pygments ships with the deps
+        return [theme.fg("mdCodeBlock", line) for line in code.split("\n")]
+
+    try:
+        lexer = get_lexer_by_name(lang, stripnl=False, ensurenl=False)
+    except Exception:
+        return [theme.fg("mdCodeBlock", line) for line in code.split("\n")]
+
+    try:
+        out: list[str] = []
+        current = ""
+        for token_type, value in lex(code, lexer):
+            color = _theme_color_for_token(token_type)
+            # Style each line's fragment separately: a styled span must not
+            # cross a newline or the reset lands on the wrong row.
+            parts = value.split("\n")
+            for index, part in enumerate(parts):
+                if index > 0:
+                    out.append(current)
+                    current = ""
+                if not part:
+                    continue
+                current += theme.fg(color, part) if color else part
+        out.append(current)
+        return out
+    except Exception:
+        return code.split("\n")
