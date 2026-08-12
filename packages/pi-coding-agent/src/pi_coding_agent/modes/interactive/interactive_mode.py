@@ -1939,13 +1939,25 @@ class InteractiveMode:
             self.chat_container.add_child(component)
             self._render_tool_calls(message, live=False)
         elif role == "custom":
-            self.chat_container.add_child(
-                CustomMessageComponent(message, None, self._markdown_theme(), self.output_pad)
-            )
+            # `message.display` gates rendering upstream (`interactive-mode.ts:3476`);
+            # a custom message that opts out of display must not occupy a row.
+            if getattr(message, "display", True):
+                component = CustomMessageComponent(message, None, self._markdown_theme(), self.output_pad)
+                component.set_expanded(self.tool_output_expanded)
+                self.chat_container.add_child(component)
         elif role == "branchSummary":
-            self.chat_container.add_child(BranchSummaryMessageComponent(message, self._markdown_theme()))
+            # Summaries are separated from the preceding turn by a blank row
+            # (`interactive-mode.ts:3496`); without it they butt against the
+            # message above.
+            self.chat_container.add_child(Spacer(1))
+            component = BranchSummaryMessageComponent(message, self._markdown_theme())
+            component.set_expanded(self.tool_output_expanded)
+            self.chat_container.add_child(component)
         elif role == "compactionSummary":
-            self.chat_container.add_child(CompactionSummaryMessageComponent(message, self._markdown_theme()))
+            self.chat_container.add_child(Spacer(1))
+            component = CompactionSummaryMessageComponent(message, self._markdown_theme())
+            component.set_expanded(self.tool_output_expanded)
+            self.chat_container.add_child(component)
         elif role == "bashExecution":
             component = BashExecutionComponent(message.command, self.ui, message.exclude_from_context)
             component.append_output(message.output)
