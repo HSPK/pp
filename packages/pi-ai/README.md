@@ -569,7 +569,8 @@ For Google API compatibility, use `string_enum()` instead of JSON Schema forms t
 Tools can opt in to provider-side constrained sampling. The Python dataclasses are `JsonSchemaConstrainedSampling` and `GrammarConstrainedSampling`.
 
 ```python
-from pi_ai import JsonSchemaConstrainedSampling, Tool
+from pi_ai import Tool
+from pi_ai.types import JsonSchemaConstrainedSampling
 
 strict_tool = Tool(
     name="edit_file",
@@ -592,7 +593,8 @@ Strict JSON-schema constrained sampling is implemented in the OpenAI, Anthropic,
 OpenAI-compatible grammar tools use `GrammarConstrainedSampling`. Native grammar tools must have an object parameter schema with exactly one required string property:
 
 ```python
-from pi_ai import GrammarConstrainedSampling, Tool
+from pi_ai import Tool
+from pi_ai.types import GrammarConstrainedSampling
 
 patch_tool = Tool(
     name="apply_patch",
@@ -612,6 +614,7 @@ patch_tool = Tool(
 Tool results use content blocks and can include both text and images:
 
 ```python
+import base64
 import json
 from pathlib import Path
 
@@ -650,7 +653,7 @@ async def example() -> None:
             tool_name="generate_chart",
             content=[
                 TextContent(text="Generated chart showing temperature trends"),
-                ImageContent(data=image_bytes.hex(), mime_type="image/png"),
+                ImageContent(data=base64.b64encode(image_bytes).decode("ascii"), mime_type="image/png"),
             ],
             is_error=False,
             timestamp=now_ms(),
@@ -1618,7 +1621,7 @@ Not applicable in the TypeScript bundler sense. Import only the provider factori
 
 ### Provider-Scoped Environment Overrides
 
-Pass `env` in stream options to scope provider configuration to a request. Values in `env` are used before process environment variables for provider auth and configuration such as Cloudflare account IDs, Azure OpenAI settings, Vertex project/location, Bedrock settings, `PI_CACHE_RETENTION`, and `HTTP_PROXY`/`HTTPS_PROXY`.
+Pass `env` in stream options to scope provider configuration to a request. Values in `env` are passed to provider API code for configuration such as Cloudflare account IDs, Azure OpenAI settings, Vertex project/location, Bedrock settings, `PI_CACHE_RETENTION`, and `HTTP_PROXY`/`HTTPS_PROXY`. In the current Python port, `Models.stream()` passes `env` into auth resolution only when `StreamOptions.api_key` is also set; otherwise ambient auth resolution reads the collection environment or process environment.
 
 ```python
 from pi_ai import Context, StreamOptions, UserMessage, complete, now_ms
@@ -1635,11 +1638,11 @@ async def example() -> None:
             model,
             Context(messages=[UserMessage(content="Hello", timestamp=now_ms())]),
             StreamOptions(
+                api_key="...",
                 env={
-                    "CLOUDFLARE_API_KEY": "...",
                     "CLOUDFLARE_ACCOUNT_ID": "account-id",
                     "CLOUDFLARE_GATEWAY_ID": "gateway-id",
-                }
+                },
             ),
         )
     )
