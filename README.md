@@ -74,14 +74,8 @@ files side by side is the only real check.
 Behaviour that upstream has and this port does not. Each entry is a deliberate
 decision with a reason, not an oversight:
 
-- **Built-in per-tool renderers** (the bespoke read/edit/bash views). The
-  renderer *hooks* are ported, so extensions can supply their own; built-in
-  tools use the generic composition path, which is what upstream does for any
-  tool without renderers.
 - **Node's `fs.watch`**, which has no standard-library equivalent; the git
   branch watcher polls instead, with the same debounce and callback contract.
-- **Syntax highlighting of code blocks**, which upstream does through
-  `highlight.js`.
 - **Mermaid diagram rendering**, which renders through the `grok-mermaid` npm
   package.
 - **The `/arminsayshi` and `/dementedelves` easter eggs** and the announcement

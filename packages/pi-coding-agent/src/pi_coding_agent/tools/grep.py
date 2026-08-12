@@ -438,3 +438,48 @@ def create_grep_tool(cwd: str) -> AgentTool:
         },
         execute=execute,
     )
+
+
+# -- rendering (port of `grep.ts`'s formatGrepCall / formatGrepResult) ------
+
+GREP_COLLAPSED_MAX_LINES = 15
+
+
+def format_grep_call(args: Any, theme: Any) -> str:
+    from pi_coding_agent.tools.render_utils import invalid_arg_text, shorten_path, str_arg
+
+    a = args if isinstance(args, dict) else {}
+    pattern = str_arg(a.get("pattern"))
+    raw_path = str_arg(a.get("path"))
+    path = shorten_path(raw_path or ".") if raw_path is not None else None
+    invalid = invalid_arg_text(theme)
+    text = (
+        theme.fg("toolTitle", theme.bold("grep"))
+        + " "
+        + (invalid if pattern is None else theme.fg("accent", f"/{pattern or ''}/"))
+        + theme.fg("toolOutput", f" in {invalid if path is None else path}")
+    )
+    glob = str_arg(a.get("glob"))
+    if glob:
+        text += theme.fg("toolOutput", f" ({glob})")
+    limit = a.get("limit")
+    if limit is not None:
+        text += theme.fg("toolOutput", f" limit {limit}")
+    return text
+
+
+def format_grep_result(result: Any, options: Any, theme: Any, show_images: bool) -> str:
+    from pi_coding_agent.tools.render_utils import format_listing_result
+
+    details = getattr(result, "details", None)
+    truncation = getattr(details, "truncation", None)
+    match_limit = getattr(details, "match_limit_reached", None)
+    lines_truncated = getattr(details, "lines_truncated", None)
+    warnings: list[str] = []
+    if match_limit:
+        warnings.append(f"{match_limit} matches limit")
+    if truncation is not None and getattr(truncation, "truncated", False):
+        warnings.append(f"{format_size(getattr(truncation, 'max_bytes', None) or DEFAULT_MAX_BYTES)} limit")
+    if lines_truncated:
+        warnings.append("some lines truncated")
+    return format_listing_result(result, options, theme, show_images, GREP_COLLAPSED_MAX_LINES, warnings)

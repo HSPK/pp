@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from pi_agent.types import AgentTool
@@ -219,8 +220,57 @@ def create_all_tool_definitions(cwd: str) -> dict[str, BuiltInToolDefinition]:
         component.set_text(text if text is not None else "")
         return component
 
+    from pi_coding_agent.tools.find import format_find_call, format_find_result
+    from pi_coding_agent.tools.grep import format_grep_call, format_grep_result
+    from pi_coding_agent.tools.ls import format_ls_call, format_ls_result
+    from pi_coding_agent.tools.write import format_write_call, format_write_result
+
+    def _simple_call(formatter: Any, pass_cwd: bool) -> Any:
+        def render(args: Any, theme: Any, context: Any) -> Any:
+            component = _text_component(context)
+            if pass_cwd:
+                component.set_text(formatter(args, theme, getattr(context, "cwd", cwd)))
+            else:
+                component.set_text(formatter(args, theme))
+            return component
+
+        return render
+
+    def _listing_result(formatter: Any) -> Any:
+        def render(result: Any, options: Any, theme: Any, context: Any) -> Any:
+            component = _text_component(context)
+            component.set_text(formatter(result, options, theme, getattr(context, "show_images", False)))
+            return component
+
+        return render
+
+    def write_render_call(args: Any, theme: Any, context: Any) -> Any:
+        component = _text_component(context)
+        # `write` is the one call renderer that needs the expansion state: the
+        # content preview lives on the call, not the result.
+        options = SimpleNamespace(expanded=getattr(context, "expanded", False))
+        component.set_text(format_write_call(args, options, theme, getattr(context, "cwd", cwd)))
+        return component
+
+    def write_render_result(result: Any, options: Any, theme: Any, context: Any) -> Any:
+        del options
+        component = _text_component(context)
+        text = format_write_result(result, theme, getattr(context, "is_error", False))
+        component.set_text(text if text is not None else "")
+        return component
+
     return {
         "read": BuiltInToolDefinition(render_call=read_render_call, render_result=read_render_result),
         "bash": BuiltInToolDefinition(render_call=bash_render_call, render_result=bash_render_result),
         "edit": BuiltInToolDefinition(render_call=edit_render_call, render_result=edit_render_result),
+        "write": BuiltInToolDefinition(render_call=write_render_call, render_result=write_render_result),
+        "ls": BuiltInToolDefinition(
+            render_call=_simple_call(format_ls_call, True), render_result=_listing_result(format_ls_result)
+        ),
+        "grep": BuiltInToolDefinition(
+            render_call=_simple_call(format_grep_call, False), render_result=_listing_result(format_grep_result)
+        ),
+        "find": BuiltInToolDefinition(
+            render_call=_simple_call(format_find_call, False), render_result=_listing_result(format_find_result)
+        ),
     }

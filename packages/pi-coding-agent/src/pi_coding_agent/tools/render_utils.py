@@ -115,3 +115,42 @@ __all__ = [
     "shorten_path",
     "str_arg",
 ]
+
+
+def format_listing_result(
+    result: Any,
+    options: Any,
+    theme: Any,
+    show_images: bool,
+    collapsed_max_lines: int,
+    warnings: list[str],
+) -> str:
+    """Shared body for the listing-style tools (`ls`, `grep`, `find`).
+
+    All three render identically in `ls.ts`, `grep.ts` and `find.ts` apart from
+    how many lines survive collapsing and which truncation warnings they
+    collect, so those are the two parameters. Keeping one implementation means
+    the "N more lines" hint cannot drift between them.
+    """
+    from pi_coding_agent.modes.interactive.components.keybinding_hints import key_hint
+
+    output = get_text_output(result, show_images).strip()
+    text = ""
+    if output:
+        lines = output.split("\n")
+        max_lines = len(lines) if getattr(options, "expanded", False) else collapsed_max_lines
+        display_lines = lines[:max_lines]
+        remaining = len(lines) - max_lines
+        body = "\n".join(theme.fg("toolOutput", line) for line in display_lines)
+        text += f"\n{body}"
+        if remaining > 0:
+            text += (
+                theme.fg("muted", f"\n... ({remaining} more lines,")
+                + " "
+                + key_hint("app.tools.expand", "to expand")
+                + theme.fg("muted", ")")
+            )
+
+    if warnings:
+        text += "\n" + theme.fg("warning", f"[Truncated: {', '.join(warnings)}]")
+    return text

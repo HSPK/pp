@@ -171,3 +171,81 @@ def test_an_edit_error_renders_its_message():
 
 def test_edit_has_a_registered_renderer():
     assert create_all_tool_definitions("/tmp")["edit"].render_call is not None
+
+
+# -- ls / grep / find / write ----------------------------------------------
+
+
+def test_all_seven_built_in_tools_have_renderers():
+    """The full set upstream registers in `createAllToolDefinitions`."""
+    definitions = create_all_tool_definitions("/tmp")
+
+    for name in ("read", "bash", "edit", "write", "ls", "grep", "find"):
+        assert definitions[name].render_call is not None, name
+        assert definitions[name].render_result is not None, name
+
+
+def test_ls_call_shows_path_and_limit():
+    from pi_coding_agent.tools.ls import format_ls_call
+
+    assert _plain(format_ls_call({"path": "src", "limit": 50}, theme, "/tmp")) == "ls src (limit 50)"
+    # An absent path renders as `.`, not as an invalid-argument marker.
+    assert _plain(format_ls_call({}, theme, "/tmp")) == "ls ."
+
+
+def test_grep_call_wraps_the_pattern_in_slashes():
+    from pi_coding_agent.tools.grep import format_grep_call
+
+    out = _plain(format_grep_call({"pattern": "TODO", "path": "src", "glob": "*.py"}, theme))
+
+    assert out == "grep /TODO/ in src (*.py)"
+
+
+def test_find_call_does_not_wrap_the_pattern():
+    """`find` takes a glob, so slashes would be misleading -- upstream omits them."""
+    from pi_coding_agent.tools.find import format_find_call
+
+    assert _plain(format_find_call({"pattern": "*.py"}, theme)) == "find *.py in ."
+
+
+def test_write_previews_content_on_the_call_not_the_result():
+    """What is about to be written is the interesting part (`write.ts:137`)."""
+    from types import SimpleNamespace
+
+    from pi_coding_agent.tools.write import format_write_call, format_write_result
+
+    call = format_write_call({"path": "a.py", "content": "x = 1"}, SimpleNamespace(expanded=False), theme, "/tmp")
+
+    assert "write a.py" in _plain(call)
+    assert "x = 1" in _plain(call)
+    assert format_write_result(_result(""), theme, False) is None
+
+
+def test_write_result_renders_only_an_error():
+    from pi_coding_agent.tools.write import format_write_result
+
+    assert _plain(format_write_result(_result("disk full"), theme, True) or "") == "\ndisk full"
+
+
+@pytest.mark.parametrize(
+    "module, formatter, collapsed_max",
+    [
+        ("pi_coding_agent.tools.ls", "format_ls_result", 20),
+        ("pi_coding_agent.tools.grep", "format_grep_result", 15),
+        ("pi_coding_agent.tools.find", "format_find_result", 20),
+    ],
+)
+def test_listing_tools_collapse_at_their_own_limits(module, formatter, collapsed_max):
+    """ls and find keep 20 lines, grep keeps 15. The limits are not interchangeable."""
+    import importlib
+
+    fn = getattr(importlib.import_module(module), formatter)
+    body = "\n".join(f"row{i}" for i in range(1, collapsed_max + 6))
+
+    collapsed = _plain(fn(_result(body), _Options(False), theme, False))
+    expanded = _plain(fn(_result(body), _Options(True), theme, False))
+
+    assert f"row{collapsed_max}" in collapsed
+    assert f"row{collapsed_max + 1}" not in collapsed
+    assert "5 more lines" in collapsed
+    assert f"row{collapsed_max + 5}" in expanded

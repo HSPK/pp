@@ -143,3 +143,42 @@ def create_find_tool(cwd: str) -> AgentTool:
         },
         execute=execute,
     )
+
+
+# -- rendering (port of `find.ts`'s formatFindCall / formatFindResult) ------
+
+FIND_COLLAPSED_MAX_LINES = 20
+
+
+def format_find_call(args: Any, theme: Any) -> str:
+    from pi_coding_agent.tools.render_utils import invalid_arg_text, shorten_path, str_arg
+
+    a = args if isinstance(args, dict) else {}
+    pattern = str_arg(a.get("pattern"))
+    raw_path = str_arg(a.get("path"))
+    path = shorten_path(raw_path or ".") if raw_path is not None else None
+    invalid = invalid_arg_text(theme)
+    text = (
+        theme.fg("toolTitle", theme.bold("find"))
+        + " "
+        + (invalid if pattern is None else theme.fg("accent", pattern or ""))
+        + theme.fg("toolOutput", f" in {invalid if path is None else path}")
+    )
+    limit = a.get("limit")
+    if limit is not None:
+        text += theme.fg("toolOutput", f" (limit {limit})")
+    return text
+
+
+def format_find_result(result: Any, options: Any, theme: Any, show_images: bool) -> str:
+    from pi_coding_agent.tools.render_utils import format_listing_result
+
+    details = getattr(result, "details", None)
+    truncation = getattr(details, "truncation", None)
+    result_limit = getattr(details, "result_limit_reached", None)
+    warnings: list[str] = []
+    if result_limit:
+        warnings.append(f"{result_limit} results limit")
+    if truncation is not None and getattr(truncation, "truncated", False):
+        warnings.append(f"{format_size(getattr(truncation, 'max_bytes', None) or DEFAULT_MAX_BYTES)} limit")
+    return format_listing_result(result, options, theme, show_images, FIND_COLLAPSED_MAX_LINES, warnings)

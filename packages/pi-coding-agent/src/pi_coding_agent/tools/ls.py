@@ -105,3 +105,33 @@ def create_ls_tool(cwd: str) -> AgentTool:
         },
         execute=execute,
     )
+
+
+# -- rendering (port of `ls.ts`'s formatLsCall / formatLsResult) ------------
+
+LS_COLLAPSED_MAX_LINES = 20
+
+
+def format_ls_call(args: Any, theme: Any, cwd: str) -> str:
+    from pi_coding_agent.tools.render_utils import render_tool_path, str_arg
+
+    a = args if isinstance(args, dict) else {}
+    text = f"{theme.fg('toolTitle', theme.bold('ls'))} {render_tool_path(str_arg(a.get('path')), theme, cwd, '.')}"
+    limit = a.get("limit")
+    if limit is not None:
+        text += theme.fg("toolOutput", f" (limit {limit})")
+    return text
+
+
+def format_ls_result(result: Any, options: Any, theme: Any, show_images: bool) -> str:
+    from pi_coding_agent.tools.render_utils import format_listing_result
+
+    details = getattr(result, "details", None)
+    truncation = getattr(details, "truncation", None)
+    entry_limit = getattr(details, "entry_limit_reached", None)
+    warnings: list[str] = []
+    if entry_limit:
+        warnings.append(f"{entry_limit} entries limit")
+    if truncation is not None and getattr(truncation, "truncated", False):
+        warnings.append(f"{format_size(getattr(truncation, 'max_bytes', None) or DEFAULT_MAX_BYTES)} limit")
+    return format_listing_result(result, options, theme, show_images, LS_COLLAPSED_MAX_LINES, warnings)

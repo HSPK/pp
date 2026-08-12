@@ -92,3 +92,68 @@ def create_write_tool(cwd: str, operations: WriteOperations | None = None) -> Ag
         },
         execute=execute,
     )
+
+
+# -- rendering (port of `write.ts`'s formatWriteCall / formatWriteResult) ---
+
+WRITE_COLLAPSED_MAX_LINES = 10
+
+
+def format_write_call(args: Any, options: Any, theme: Any, cwd: str) -> str:
+    """Port of `formatWriteCall`.
+
+    The content preview lives on the *call*, not the result: what the model is
+    about to write is the interesting part, and the result carries only an
+    error if one occurred.
+    """
+    from pi_coding_agent.modes.interactive.components.keybinding_hints import key_hint
+    from pi_coding_agent.modes.interactive.theme.theme import get_language_from_path, highlight_code
+    from pi_coding_agent.tools.render_utils import (
+        normalize_display_text,
+        render_tool_path,
+        replace_tabs,
+        str_arg,
+    )
+
+    a = args if isinstance(args, dict) else {}
+    raw_path = str_arg(a.get("file_path") if a.get("file_path") is not None else a.get("path"))
+    file_content = str_arg(a.get("content"))
+    text = f"{theme.fg('toolTitle', theme.bold('write'))} {render_tool_path(raw_path, theme, cwd)}"
+
+    if file_content is None:
+        return text + f"\n\n{theme.fg('error', '[invalid content arg - expected string]')}"
+    if not file_content:
+        return text
+
+    lang = get_language_from_path(raw_path) if raw_path else None
+    normalized = normalize_display_text(file_content)
+    rendered_lines = highlight_code(replace_tabs(normalized), lang) if lang else normalized.split("\n")
+    while rendered_lines and rendered_lines[-1] == "":
+        rendered_lines.pop()
+    total_lines = len(rendered_lines)
+    max_lines = total_lines if getattr(options, "expanded", False) else WRITE_COLLAPSED_MAX_LINES
+    display_lines = rendered_lines[:max_lines]
+    remaining = total_lines - max_lines
+
+    body = "\n".join(line if lang else theme.fg("toolOutput", replace_tabs(line)) for line in display_lines)
+    text += f"\n\n{body}"
+    if remaining > 0:
+        text += (
+            theme.fg("muted", f"\n... ({remaining} more lines, {total_lines} total,")
+            + " "
+            + key_hint("app.tools.expand", "to expand")
+            + theme.fg("muted", ")")
+        )
+    return text
+
+
+def format_write_result(result: Any, theme: Any, is_error: bool) -> str | None:
+    """Port of `formatWriteResult`: nothing unless it failed."""
+    if not is_error:
+        return None
+    output = "\n".join(
+        getattr(c, "text", "") or "" for c in getattr(result, "content", []) if getattr(c, "type", None) == "text"
+    )
+    if not output:
+        return None
+    return f"\n{theme.fg('error', output)}"
