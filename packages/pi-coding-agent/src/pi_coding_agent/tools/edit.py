@@ -213,3 +213,48 @@ def create_edit_tool(cwd: str, operations: EditOperations | None = None) -> Agen
     )
     tool.prepare_arguments = _prepare_edit_arguments
     return tool
+
+
+# --------------------------------------------------------------------------
+# Rendering
+#
+# Port of `edit.ts`'s `formatEditCall` / `formatEditResult`. The live preview
+# component upstream wraps these in a coloured header box (success/error/
+# pending backgrounds); that box belongs to the unported extension UI host, so
+# what is ported here is the text both paths render.
+# --------------------------------------------------------------------------
+
+
+def format_edit_call(args: Any, theme: Any, cwd: str) -> str:
+    """Port of `formatEditCall`."""
+    from pi_coding_agent.tools.render_utils import render_tool_path, str_arg
+
+    a = args if isinstance(args, dict) else {}
+    raw = str_arg(a.get("file_path") if a.get("file_path") is not None else a.get("path"))
+    return f"{theme.fg('toolTitle', theme.bold('edit'))} {render_tool_path(raw, theme, cwd)}"
+
+
+def format_edit_result(args: Any, result: Any, theme: Any, is_error: bool) -> str | None:
+    """Port of `formatEditResult`. `None` means "render nothing".
+
+    An error whose text merely repeats the preview's own error is suppressed,
+    matching upstream: the message is already on screen above.
+    """
+    from pi_coding_agent.modes.interactive.components.diff import RenderDiffOptions, render_diff
+    from pi_coding_agent.tools.render_utils import str_arg
+
+    a = args if isinstance(args, dict) else {}
+    raw_path = str_arg(a.get("file_path") if a.get("file_path") is not None else a.get("path"))
+
+    if is_error:
+        error_text = "\n".join(
+            getattr(c, "text", "") or "" for c in getattr(result, "content", []) if getattr(c, "type", None) == "text"
+        )
+        if not error_text:
+            return None
+        return theme.fg("error", error_text)
+
+    result_diff = getattr(getattr(result, "details", None), "diff", None)
+    if result_diff:
+        return render_diff(result_diff, RenderDiffOptions(file_path=raw_path or None))
+    return None

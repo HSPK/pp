@@ -132,3 +132,42 @@ def test_bash_reports_elapsed_time_while_running_and_total_when_done():
 
     assert "Elapsed 2.5s" in _plain("\n".join(running))
     assert "Took 2.5s" in _plain("\n".join(finished))
+
+
+# -- edit ------------------------------------------------------------------
+
+
+def test_edit_call_shows_the_target_path():
+    from pi_coding_agent.tools.edit import format_edit_call
+
+    assert _plain(format_edit_call({"path": "README.md"}, theme, "/tmp")) == "edit README.md"
+
+
+def test_edit_result_renders_the_diff():
+    from pi_coding_agent.tools.edit import EditToolDetails, format_edit_result
+
+    result = AgentToolResult(content=[], details=EditToolDetails(diff="-old\n+new", patch=""))
+
+    out = format_edit_result({"path": "a.txt"}, result, theme, False)
+
+    assert out is not None
+    assert "-old" in _plain(out) and "+new" in _plain(out)
+
+
+def test_edit_result_is_empty_without_a_diff():
+    """Nothing to say means nothing rendered, matching `formatEditResult`."""
+    from pi_coding_agent.tools.edit import format_edit_result
+
+    assert format_edit_result({"path": "a.txt"}, AgentToolResult(content=[], details=None), theme, False) is None
+
+
+def test_an_edit_error_renders_its_message():
+    from pi_coding_agent.tools.edit import format_edit_result
+
+    out = format_edit_result({"path": "a.txt"}, _result("no match found"), theme, True)
+
+    assert _plain(out or "") == "no match found"
+
+
+def test_edit_has_a_registered_renderer():
+    assert create_all_tool_definitions("/tmp")["edit"].render_call is not None

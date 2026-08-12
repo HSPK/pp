@@ -187,11 +187,11 @@ class TestToolExecutionComponentParity:
 
         rendered = _rendered(component)
         assert "edit" in rendered
-        # TypeScript also asserts `README.md` appears: its built-in `edit`
-        # renderer prints the target path in the header. The generic fallback
-        # renders only the tool name and the text output, and this result has
-        # no text content, so there is nothing to carry the path. The built-in
-        # `edit` renderer is on the README's "Not ported, by decision" list.
+        # Upstream's assertion, now reachable: the built-in `edit` renderer
+        # prints the target path in the header. This used to be commented out
+        # because the built-in renderers were unported and the generic
+        # fallback had nothing to carry the path.
+        assert "README.md" in rendered
         assert ":1" not in rendered
 
     def test_preserves_legacy_file_path_rendering_compatibility_for_built_in_tools(self) -> None:

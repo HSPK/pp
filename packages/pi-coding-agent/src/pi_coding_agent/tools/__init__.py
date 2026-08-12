@@ -201,7 +201,26 @@ def create_all_tool_definitions(cwd: str) -> dict[str, BuiltInToolDefinition]:
         )
         return component
 
+    from pi_coding_agent.tools.edit import format_edit_call, format_edit_result
+
+    def edit_render_call(args: Any, theme: Any, context: Any) -> Any:
+        component = _text_component(context)
+        component.set_text(format_edit_call(args, theme, getattr(context, "cwd", cwd)))
+        return component
+
+    def edit_render_result(result: Any, options: Any, theme: Any, context: Any) -> Any:
+        del options
+        text = format_edit_result(getattr(context, "args", None), result, theme, getattr(context, "is_error", False))
+        component = _text_component(context)
+        # `formatEditResult` returns undefined for "nothing to add" (the error
+        # text merely repeats the preview, or there is no diff). Upstream's
+        # renderer signature always yields a component, so render empty rather
+        # than handing the container a None child.
+        component.set_text(text if text is not None else "")
+        return component
+
     return {
         "read": BuiltInToolDefinition(render_call=read_render_call, render_result=read_render_result),
         "bash": BuiltInToolDefinition(render_call=bash_render_call, render_result=bash_render_result),
+        "edit": BuiltInToolDefinition(render_call=edit_render_call, render_result=edit_render_result),
     }
