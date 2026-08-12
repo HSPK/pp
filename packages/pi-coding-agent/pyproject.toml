@@ -1,0 +1,41 @@
+[project]
+name = "pi-coding-agent"
+version = "0.0.1"
+description = "Coding agent CLI (Python port of @earendil-works/pi)"
+requires-python = ">=3.11"
+dependencies = [
+    "pi-ai",
+    "pi-agent",
+    "pi-tui",
+    "pi-protocol",
+    "pi-telemetry",
+    "pyyaml>=6.0",
+    "jsonschema>=4.23",
+    "pillow>=11.0",
+]
+
+[project.scripts]
+pp = "pi_coding_agent.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pi_coding_agent"]
+
+# `docs/`, `examples/` and `README.md` are read at runtime, not just published:
+# the system prompt points the model at them so it can answer questions about
+# pi itself (see `core/config.py`'s `get_docs_path`). They must land inside the
+# installed package, or that capability silently disappears in a wheel install.
+[tool.hatch.build.targets.wheel.force-include]
+"docs" = "pi_coding_agent/docs"
+"examples" = "pi_coding_agent/examples"
+"README.md" = "pi_coding_agent/README.md"
+
+[tool.uv.sources]
+pi-ai = { workspace = true }
+pi-agent = { workspace = true }
+pi-tui = { workspace = true }
+pi-protocol = { workspace = true }
+pi-telemetry = { workspace = true }

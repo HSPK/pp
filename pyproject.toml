@@ -1,0 +1,88 @@
+[project]
+name = "pypi-monorepo"
+version = "0.0.1"
+description = "Python port of the pi monorepo (agent, ai, tui, coding-agent)"
+requires-python = ">=3.11"
+dependencies = [
+    "pi-telemetry",
+    "pi-ai",
+    "pi-agent",
+    "pi-tui",
+    "pi-protocol",
+    "pi-client",
+    "pi-server",
+    "pi-coding-agent",
+    "pi-evals",
+]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+pi-telemetry = { workspace = true }
+pi-ai = { workspace = true }
+pi-agent = { workspace = true }
+pi-tui = { workspace = true }
+pi-protocol = { workspace = true }
+pi-client = { workspace = true }
+pi-server = { workspace = true }
+pi-coding-agent = { workspace = true }
+pi-evals = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "pytest-xdist>=3.6",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["packages"]
+# `-n auto` matters: the suite is dominated by tests that wait (real
+# `asyncio.sleep` for OAuth device-code polling, retry backoff, subprocess
+# timeouts), so wall time was ~2.5x CPU time when run serially. Override
+# with `-n0` to debug a single test.
+addopts = "-q -n auto"
+filterwarnings = ["error::DeprecationWarning:pi_.*"]
+
+[tool.coverage.run]
+branch = true
+source = [
+    "packages/pi-telemetry/src",
+    "packages/pi-ai/src",
+    "packages/pi-agent/src",
+    "packages/pi-tui/src",
+    "packages/pi-protocol/src",
+    "packages/pi-client/src",
+    "packages/pi-server/src",
+    "packages/pi-coding-agent/src",
+    "packages/pi-evals/src",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "\\.\\.\\.$",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501", "B008", "SIM108", "RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+ignore_missing_imports = true

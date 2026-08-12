@@ -1,0 +1,318 @@
+"""Terminal UI toolkit (Python port of ``@earendil-works/pi-tui``).
+
+Re-exports the public API of every ported module, mirroring
+`packages/tui/src/index.ts`. LaTeX rendering (`latex.ts`) and the
+full-featured multi-line text editor (`components/editor.ts`) are ported;
+see `pi_tui.latex` and `pi_tui.components.editor`.
+"""
+
+from __future__ import annotations
+
+from pi_tui.autocomplete import (
+    AppliedCompletion,
+    AutocompleteItem,
+    AutocompleteProvider,
+    AutocompleteSuggestions,
+    CombinedAutocompleteProvider,
+    SlashCommand,
+)
+from pi_tui.component import CURSOR_MARKER, Component, Container, Focusable, is_focusable
+from pi_tui.components.alt_screen_flash import AltScreenFlashContainer
+from pi_tui.components.box import Box
+from pi_tui.components.editor import Editor, EditorOptions, EditorTheme
+from pi_tui.components.h_stack import HStack
+from pi_tui.components.image import Image, ImageOptions, ImageTheme
+from pi_tui.components.input import Input
+from pi_tui.components.loader import (
+    CancellableLoader,
+    Loader,
+    LoaderIndicatorOptions,
+)
+from pi_tui.components.markdown import Markdown, MarkdownOptions, MarkdownTheme
+from pi_tui.components.scroll_view import ScrollView, ScrollViewOptions, ScrollViewScrollbar
+from pi_tui.components.select_list import (
+    SelectItem,
+    SelectList,
+    SelectListLayoutOptions,
+    SelectListTheme,
+    SelectListTruncatePrimaryContext,
+)
+from pi_tui.components.settings_list import (
+    SettingItem,
+    SettingsList,
+    SettingsListOptions,
+    SettingsListTheme,
+)
+from pi_tui.components.spacer import Spacer
+from pi_tui.components.stack import Stack, StackChild, StackEntry, StackEntryOptions, StackOptions
+from pi_tui.components.text import Text
+from pi_tui.components.truncated_text import TruncatedText
+from pi_tui.components.v_stack import VStack
+from pi_tui.editor_component import (
+    OPTIONAL_EDITOR_METHODS,
+    REQUIRED_EDITOR_METHODS,
+    EditorComponent,
+    EditorComponentExtras,
+    get_expanded_text,
+    supports,
+)
+from pi_tui.fuzzy import FuzzyMatch, fuzzy_filter, fuzzy_match
+from pi_tui.keybindings import (
+    TUI_KEYBINDINGS,
+    Keybinding,
+    KeybindingConflict,
+    KeybindingDefinition,
+    KeybindingDefinitions,
+    KeybindingsConfig,
+    KeybindingsManager,
+    get_keybindings,
+    set_keybindings,
+)
+from pi_tui.keys import (
+    Key,
+    KeyEventType,
+    KeyId,
+    decode_kitty_printable,
+    is_key_release,
+    is_key_repeat,
+    is_kitty_protocol_active,
+    matches_key,
+    parse_key,
+    set_kitty_protocol_active,
+)
+from pi_tui.kill_ring import KillRing
+from pi_tui.latex import RenderLatexOptions, render_latex
+from pi_tui.layout import (
+    LayoutBox,
+    LayoutContext,
+    LayoutFrame,
+    LayoutRect,
+    ScrollbarGeometry,
+    contains_point,
+    get_scroll_view_box,
+    get_scroll_views_at,
+    get_scrollbar_geometry,
+    intersect,
+    layout_component,
+    measure_height,
+    measure_width,
+    paint_box,
+    paint_scrollbar,
+    render_cached,
+    render_layout_frame,
+    style_scrollbar_cell,
+    translate_box,
+    update_clips,
+    with_parent,
+)
+from pi_tui.stdin_buffer import StdinBuffer
+from pi_tui.tasks import spawn
+from pi_tui.terminal import ProcessTerminal, StdinSource, Terminal, TerminalIo, real_terminal_io
+from pi_tui.terminal_colors import (
+    RgbColor,
+    is_osc11_background_color_response,
+    parse_osc11_background_color,
+    parse_terminal_color_scheme_report,
+)
+from pi_tui.terminal_image import (
+    ImageDimensions,
+    ImageRenderOptions,
+    TerminalCapabilities,
+    detect_capabilities,
+    encode_iterm2,
+    encode_kitty,
+    get_capabilities,
+    get_cell_dimensions,
+    get_image_dimensions,
+    image_fallback,
+    render_image,
+)
+from pi_tui.timers import IntervalHandle, schedule_interval
+from pi_tui.tui import (
+    OverlayHandle,
+    OverlayOptions,
+    TuiBase,
+    TuiStopOptions,
+    composite_tui_line,
+)
+from pi_tui.tui_alt_screen import TuiAltScreen, TuiAltScreenOptions
+from pi_tui.tui_main_screen import TuiMainScreen
+from pi_tui.undo_stack import UndoStack
+from pi_tui.utils import (
+    PUNCTUATION_REGEX,
+    WordSegment,
+    apply_background_to_line,
+    extract_ansi_code,
+    extract_segments,
+    get_grapheme_cell_range,
+    get_osc8_link_at_column,
+    is_punctuation_char,
+    is_whitespace_char,
+    iter_graphemes,
+    iter_word_segments,
+    normalize_terminal_output,
+    slice_by_column,
+    slice_with_width,
+    strip_terminal_sequences,
+    truncate_to_width,
+    visible_width,
+    wrap_text_with_ansi,
+)
+from pi_tui.word_navigation import WordNavigationOptions, find_word_backward, find_word_forward
+
+__all__ = [
+    "CURSOR_MARKER",
+    "OPTIONAL_EDITOR_METHODS",
+    "PUNCTUATION_REGEX",
+    "REQUIRED_EDITOR_METHODS",
+    "TUI_KEYBINDINGS",
+    "AltScreenFlashContainer",
+    "AppliedCompletion",
+    "AutocompleteItem",
+    "AutocompleteProvider",
+    "AutocompleteSuggestions",
+    "Box",
+    "CancellableLoader",
+    "CombinedAutocompleteProvider",
+    "Component",
+    "Container",
+    "Editor",
+    "EditorComponent",
+    "EditorComponentExtras",
+    "EditorOptions",
+    "EditorTheme",
+    "Focusable",
+    "FuzzyMatch",
+    "HStack",
+    "Image",
+    "ImageDimensions",
+    "ImageOptions",
+    "ImageRenderOptions",
+    "ImageTheme",
+    "Input",
+    "IntervalHandle",
+    "Key",
+    "KeyEventType",
+    "KeyId",
+    "Keybinding",
+    "KeybindingConflict",
+    "KeybindingDefinition",
+    "KeybindingDefinitions",
+    "KeybindingsConfig",
+    "KeybindingsManager",
+    "KillRing",
+    "LayoutBox",
+    "LayoutContext",
+    "LayoutFrame",
+    "LayoutRect",
+    "Loader",
+    "LoaderIndicatorOptions",
+    "Markdown",
+    "MarkdownOptions",
+    "MarkdownTheme",
+    "OverlayHandle",
+    "OverlayOptions",
+    "ProcessTerminal",
+    "RenderLatexOptions",
+    "RgbColor",
+    "ScrollView",
+    "ScrollViewOptions",
+    "ScrollViewScrollbar",
+    "ScrollbarGeometry",
+    "SelectItem",
+    "SelectList",
+    "SelectListLayoutOptions",
+    "SelectListTheme",
+    "SelectListTruncatePrimaryContext",
+    "SettingItem",
+    "SettingsList",
+    "SettingsListOptions",
+    "SettingsListTheme",
+    "SlashCommand",
+    "Spacer",
+    "Stack",
+    "StackChild",
+    "StackEntry",
+    "StackEntryOptions",
+    "StackOptions",
+    "StdinBuffer",
+    "StdinSource",
+    "Terminal",
+    "TerminalCapabilities",
+    "TerminalIo",
+    "Text",
+    "TruncatedText",
+    "TuiAltScreen",
+    "TuiAltScreenOptions",
+    "TuiBase",
+    "TuiMainScreen",
+    "TuiStopOptions",
+    "UndoStack",
+    "VStack",
+    "WordNavigationOptions",
+    "WordSegment",
+    "apply_background_to_line",
+    "composite_tui_line",
+    "contains_point",
+    "decode_kitty_printable",
+    "detect_capabilities",
+    "encode_iterm2",
+    "encode_kitty",
+    "extract_ansi_code",
+    "extract_segments",
+    "find_word_backward",
+    "find_word_forward",
+    "fuzzy_filter",
+    "fuzzy_match",
+    "get_capabilities",
+    "get_cell_dimensions",
+    "get_expanded_text",
+    "get_grapheme_cell_range",
+    "get_image_dimensions",
+    "get_keybindings",
+    "get_osc8_link_at_column",
+    "get_scroll_view_box",
+    "get_scroll_views_at",
+    "get_scrollbar_geometry",
+    "image_fallback",
+    "intersect",
+    "is_focusable",
+    "is_key_release",
+    "is_key_repeat",
+    "is_kitty_protocol_active",
+    "is_osc11_background_color_response",
+    "is_punctuation_char",
+    "is_whitespace_char",
+    "iter_graphemes",
+    "iter_word_segments",
+    "layout_component",
+    "matches_key",
+    "measure_height",
+    "measure_width",
+    "normalize_terminal_output",
+    "paint_box",
+    "paint_scrollbar",
+    "parse_key",
+    "parse_osc11_background_color",
+    "parse_terminal_color_scheme_report",
+    "real_terminal_io",
+    "render_cached",
+    "render_image",
+    "render_latex",
+    "render_layout_frame",
+    "schedule_interval",
+    "set_keybindings",
+    "set_kitty_protocol_active",
+    "slice_by_column",
+    "slice_with_width",
+    "spawn",
+    "strip_terminal_sequences",
+    "style_scrollbar_cell",
+    "supports",
+    "translate_box",
+    "truncate_to_width",
+    "update_clips",
+    "visible_width",
+    "with_parent",
+    "wrap_text_with_ansi",
+]
