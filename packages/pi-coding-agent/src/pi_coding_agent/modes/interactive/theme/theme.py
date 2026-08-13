@@ -18,12 +18,6 @@ character set; the `"/"` restriction is enforced separately by
 `assertThemeNameIsValid` does after schema validation passes.
 
 **Not ported (depend on subsystems this port does not have):**
-- `highlightCode` / `getLanguageFromPath` / `getCliHighlightTheme` --
-  depend on `highlight`/`supportsLanguage` in `utils/syntax-highlight.ts`,
-  which wrap the `cli-highlight`/highlight.js pair. Nothing equivalent is
-  bundled here, so `get_markdown_theme` leaves `MarkdownTheme.highlight_code`
-  at `None` and fenced code blocks in assistant markdown render in the flat
-  `mdCodeBlock` colour instead of being syntax-coloured.
 - The theme file watcher (`startThemeWatcher` / `stopThemeWatcher`) --
   depends on `utils/fs-watch.ts`, which exists to drive live theme reload
   from disk edits. `onThemeChange` itself *is* ported (see below); only the
