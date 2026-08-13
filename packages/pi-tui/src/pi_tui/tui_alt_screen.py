@@ -428,6 +428,7 @@ class TuiAltScreen(TuiBase):
     def _handle_viewport_input(self, data: str) -> TuiInputListenerResult | None:
         if data == _FOCUS_OUT:
             had_active_selection = self._selection_press_active
+            had_non_empty_active_selection = had_active_selection and self._get_selection_bounds() is not None
             self._selection_press_active = False
             self._stop_selection_auto_scroll()
             self._stop_scrollbar_hover()
@@ -439,8 +440,9 @@ class TuiAltScreen(TuiBase):
                 self._selection_focus = None
                 self._selection_granularity = "character"
                 self._selection_initial_range = None
+                if had_non_empty_active_selection:
+                    self.request_render()
             self._last_click = None
-            self.request_render()
             return TuiInputListenerResult(consume=True)
         if data == _FOCUS_IN:
             return TuiInputListenerResult(consume=True)

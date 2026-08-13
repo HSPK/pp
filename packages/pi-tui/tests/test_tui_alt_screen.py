@@ -567,6 +567,82 @@ class TestHyperlinksAndSelection:
         tui.stop()
         assert "\x1b[?1004l" in _all_writes(terminal)
 
+    @pytest.mark.asyncio
+    async def test_does_not_repaint_idle_or_zero_width_selections_on_focus_loss(self) -> None:
+        terminal = FakeTerminal(20, 4)
+        tui = TuiAltScreen(terminal)
+        tui.add_child(_Text("alpha\nbeta\ngamma\ndelta"))
+        tui.start()
+        await wait_render()
+
+        idle_write_count = len(terminal.writes)
+        terminal.send_input("\x1b[O")  # FOCUS_OUT
+        terminal.send_input("\x1b[I")  # FOCUS_IN
+        await wait_render()
+        assert len(terminal.writes) == idle_write_count
+
+        # Losing focus after a press without a drag cancels the press without repainting.
+        terminal.send_input("\x1b[<0;1;3M")
+        await wait_render()
+        pressed_write_count = len(terminal.writes)
+        terminal.send_input("\x1b[O")
+        terminal.send_input("\x1b[I")
+        await wait_render()
+        assert len(terminal.writes) == pressed_write_count
+        tui.stop()
+
+    @pytest.mark.asyncio
+    async def test_clears_an_active_visible_selection_on_focus_loss(self) -> None:
+        terminal = FakeTerminal(20, 4)
+        tui = TuiAltScreen(terminal)
+        tui.add_child(_Text("alpha\nbeta\ngamma\ndelta"))
+        tui.start()
+        await wait_render()
+
+        terminal.send_input("\x1b[<0;1;1M")
+        terminal.send_input("\x1b[<32;4;2M")
+        await wait_render()
+        focus_loss_write_index = len(terminal.writes)
+        terminal.send_input("\x1b[O")
+        terminal.send_input("\x1b[I")
+        await wait_render()
+        focus_loss_writes = "".join(terminal.writes[focus_loss_write_index:])
+        assert "alpha" in focus_loss_writes
+        assert "beta" in focus_loss_writes
+        assert "\x1b[7m" not in focus_loss_writes
+
+        terminal.send_input("\x1b[<32;4;2M")
+        terminal.send_input("\x1b[<0;4;2m")
+        await wait_render()
+        assert "\x1b]52;c;" not in _all_writes(terminal)
+        tui.stop()
+
+    @pytest.mark.asyncio
+    async def test_retains_a_completed_visible_selection_across_focus_changes(self) -> None:
+        terminal = FakeTerminal(20, 4)
+        tui = TuiAltScreen(terminal)
+        tui.add_child(_Text("alpha\nbeta\ngamma\ndelta"))
+        tui.start()
+        await wait_render()
+
+        terminal.send_input("\x1b[<0;1;1M")
+        terminal.send_input("\x1b[<32;4;2M")
+        terminal.send_input("\x1b[<0;4;2m")
+        await wait_render()
+        completed_write_count = len(terminal.writes)
+        terminal.send_input("\x1b[O")
+        terminal.send_input("\x1b[I")
+        await wait_render()
+        assert len(terminal.writes) == completed_write_count
+
+        redraw_write_index = len(terminal.writes)
+        tui.render_now(True)
+        redraw_writes = "".join(terminal.writes[redraw_write_index:])
+        assert "alpha" in redraw_writes
+        assert "beta" in redraw_writes
+        assert "\x1b[7m" in redraw_writes
+        tui.stop()
+
 
 class TestFlashMessages:
     @pytest.mark.asyncio
