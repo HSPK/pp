@@ -1244,3 +1244,79 @@ class TestSelectionHelperGuards:
         screen = ["abcdef"]
         assert tui._apply_selection(screen) == screen
         tui.stop()
+
+
+class _InputOverlay(Component):
+    """Port of the upstream test's `InputOverlay`: records everything it receives."""
+
+    def __init__(self) -> None:
+        self.focused = False
+        self.inputs: list[str] = []
+
+    def handle_input(self, data: str) -> None:
+        self.inputs.append(data)
+
+    def render(self, width: int) -> list[str]:
+        del width
+        return ["overlay"]
+
+    def invalidate(self) -> None:
+        pass
+
+
+class TestOverlayViewportInput:
+    """Port of upstream `2e4d23959`'s cases.
+
+    Scrolling inside a focused overlay used to move the transcript behind it,
+    because the alt screen consumed the wheel and the viewport keys before the
+    overlay ever saw them.
+    """
+
+    @pytest.mark.asyncio
+    async def test_gives_wheel_and_viewport_keys_to_a_focused_overlay(self) -> None:
+        terminal = FakeTerminal(20, 6)
+        tui = TuiAltScreen(terminal)
+        tui.add_child(_Text("\n".join(f"line {i + 1}" for i in range(12))))
+        overlay = _InputOverlay()
+        tui.start()
+        await wait_render()
+        top_before = tui.viewport_top
+        handle = tui.show_overlay(overlay)
+        await wait_render()
+
+        wheel = "\x1b[<64;10;3M"
+        keys = ["\x1b[5~", "\x1b[6~", "\x1bOH", "\x1bOF", wheel]
+        for key in keys:
+            terminal.send_input(key)
+        await wait_render()
+
+        assert overlay.inputs == keys
+        assert tui.viewport_top == top_before
+
+        handle.hide()
+        await wait_render()
+        terminal.send_input("\x1b[5~")
+        await wait_render()
+        assert tui.viewport_top < top_before
+        tui.stop()
+
+    @pytest.mark.asyncio
+    async def test_keeps_viewport_scrolling_when_an_overlay_is_not_focused(self) -> None:
+        terminal = FakeTerminal(20, 6)
+        tui = TuiAltScreen(terminal)
+        tui.add_child(_Text("\n".join(f"line {i + 1}" for i in range(12))))
+        tui.start()
+        await wait_render()
+        top_before = tui.viewport_top
+
+        overlay = _InputOverlay()
+        tui.show_overlay(overlay)
+        await wait_render()
+        tui.set_focus(None)
+        await wait_render()
+
+        terminal.send_input("\x1b[5~")
+        await wait_render()
+
+        assert tui.viewport_top < top_before
+        tui.stop()

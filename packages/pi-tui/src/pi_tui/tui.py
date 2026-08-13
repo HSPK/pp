@@ -611,6 +611,13 @@ class TuiBase(Container):
     def has_overlay(self) -> bool:
         return any(self._is_overlay_visible(o) for o in self._overlay_stack)
 
+    def _is_overlay_focused(self) -> bool:
+        """Whether focus sits on a visible overlay. Port of `isOverlayFocused`."""
+        return any(
+            entry.component is self._focused_component and self._is_overlay_visible(entry)
+            for entry in self._overlay_stack
+        )
+
     def _is_overlay_visible(self, entry: _OverlayStackEntry) -> bool:
         if entry.hidden:
             return False

@@ -447,6 +447,8 @@ class TuiAltScreen(TuiBase):
 
         wheel_event = self._parse_wheel_event(data)
         if wheel_event is not None:
+            if self._should_defer_viewport_input_to_overlay():
+                return None
             self._route_wheel(wheel_event)
             return TuiInputListenerResult(consume=True)
         mouse_event = self._parse_sgr_mouse_event(data)
@@ -463,6 +465,8 @@ class TuiAltScreen(TuiBase):
             return TuiInputListenerResult(consume=True)
 
         keybindings = get_keybindings()
+        if self._should_defer_viewport_input_to_overlay():
+            return None
         is_release = is_key_release(data)
         if keybindings.matches(data, "tui.altScreen.pageUp"):
             if not is_release:
@@ -505,6 +509,17 @@ class TuiAltScreen(TuiBase):
                 self.scroll_to_bottom()
             return TuiInputListenerResult(consume=True)
         return None
+
+    def _should_defer_viewport_input_to_overlay(self) -> bool:
+        """Let a focused overlay keep the wheel and the viewport keys.
+
+        Port of `shouldDeferViewportInputToOverlay` (`tui-alt-screen.ts`).
+        Without it, scrolling inside a focused overlay moved the transcript
+        behind it instead. Upstream also excludes its own search overlay from
+        this rule; that overlay is not ported here, so there is nothing to
+        exclude.
+        """
+        return self._is_overlay_focused()
 
     def _parse_wheel_event(self, data: str) -> _WheelEvent | None:
         sgr = _SGR_WHEEL_PATTERN.match(data)
