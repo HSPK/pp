@@ -66,6 +66,10 @@ TUI_KEYBINDINGS: KeybindingDefinitions = {
     "tui.altScreen.pageDown": KeybindingDefinition("pageDown", "Scroll viewport down one page"),
     "tui.altScreen.halfPageUp": KeybindingDefinition([], "Scroll viewport up half a page"),
     "tui.altScreen.halfPageDown": KeybindingDefinition([], "Scroll viewport down half a page"),
+    # Unbound by default, like upstream: they exist so a user can bind
+    # single-line scrolling, which no default key occupies.
+    "tui.altScreen.lineUp": KeybindingDefinition([], "Scroll viewport up one line"),
+    "tui.altScreen.lineDown": KeybindingDefinition([], "Scroll viewport down one line"),
     "tui.altScreen.previousPrompt": KeybindingDefinition("ctrl+shift+up", "Jump to previous semantic prompt"),
     "tui.altScreen.nextPrompt": KeybindingDefinition("ctrl+shift+down", "Jump to next semantic prompt"),
     "tui.altScreen.top": KeybindingDefinition("home", "Scroll viewport to top"),

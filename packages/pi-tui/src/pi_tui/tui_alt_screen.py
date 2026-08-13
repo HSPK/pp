@@ -480,6 +480,14 @@ class TuiAltScreen(TuiBase):
             if not is_release:
                 self.scroll_by(max(1, self._get_primary_scroll_view().viewport_height // 2))
             return TuiInputListenerResult(consume=True)
+        if keybindings.matches(data, "tui.altScreen.lineUp"):
+            if not is_release:
+                self.scroll_by(-1)
+            return TuiInputListenerResult(consume=True)
+        if keybindings.matches(data, "tui.altScreen.lineDown"):
+            if not is_release:
+                self.scroll_by(1)
+            return TuiInputListenerResult(consume=True)
         if keybindings.matches(data, "tui.altScreen.previousPrompt"):
             if not is_release:
                 self._scroll_to_prompt(-1)

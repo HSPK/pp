@@ -568,6 +568,16 @@ class SettingsManager:
         self._mark_modified("theme")
         self._save()
 
+    def get_default_tools(self) -> list[str] | None:
+        """Initial tool allowlist, same format as the `--tools` CLI flag.
+
+        Port of `getDefaultTools` (`settings-manager.ts:1192`). Returns a copy:
+        the caller filters it in place when `--exclude-tools` is set, and
+        mutating the stored settings would make the exclusion permanent.
+        """
+        tools = self._settings.get("defaultTools")
+        return list(tools) if tools else None
+
     def get_default_thinking_level(self) -> str | None:
         return self._settings.get("defaultThinkingLevel")
 

@@ -268,10 +268,15 @@ async def create_agent_session(options: CreateAgentSessionOptions | None = None)
     allowed_tool_names = options.tools if options.tools is not None else ([] if options.no_tools == "all" else None)
     excluded_tool_names = options.exclude_tools
     excluded_tool_name_set = set(excluded_tool_names) if excluded_tool_names else None
+    # The `defaultTools` setting seeds the *initial built-in selection* only
+    # (`sdk.ts:248-253`). It deliberately does not narrow `allowed_tool_names`:
+    # an earlier upstream revision did, which disabled extension tools that the
+    # user had never listed, and 541045ae0 reverted that half.
+    configured_default_tool_names = settings_manager.get_default_tools()
     initial_active_tool_names = (
         list(options.tools)
         if options.tools is not None
-        else ([] if options.no_tools else list(_DEFAULT_ACTIVE_TOOL_NAMES))
+        else ([] if options.no_tools else list(configured_default_tool_names or _DEFAULT_ACTIVE_TOOL_NAMES))
     )
     if excluded_tool_name_set:
         initial_active_tool_names = [name for name in initial_active_tool_names if name not in excluded_tool_name_set]

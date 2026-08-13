@@ -295,6 +295,39 @@ class TestKeyboardViewportNavigation:
         tui.stop()
 
     @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_single_line_scroll_with_custom_bindings(self) -> None:
+        """`tui.altScreen.lineUp`/`lineDown`, unbound by default upstream.
+
+        They exist so a user can bind single-line scrolling; no default key
+        occupies them, so the only way to exercise them is a custom binding.
+        """
+        original = get_keybindings()
+        terminal = FakeTerminal(20, 10)
+        tui = TuiAltScreen(terminal)
+        set_keybindings(
+            KeybindingsManager(
+                TUI_KEYBINDINGS,
+                {"tui.altScreen.lineUp": "ctrl+u", "tui.altScreen.lineDown": "ctrl+d"},
+            )
+        )
+        try:
+            tui.add_child(_Text("\n".join(f"line {i + 1}" for i in range(30))))
+            tui.start()
+            await wait_render()
+            assert tui.viewport_top == 20
+
+            terminal.send_input("\x15")  # ctrl+u
+            await wait_render()
+            assert tui.viewport_top == 19
+
+            terminal.send_input("\x04")  # ctrl+d
+            await wait_render()
+            assert tui.viewport_top == 20
+        finally:
+            tui.stop()
+            set_keybindings(original)
+
     async def test_half_page_scroll_with_custom_bindings(self) -> None:
         original = get_keybindings()
         terminal = FakeTerminal(20, 10)
