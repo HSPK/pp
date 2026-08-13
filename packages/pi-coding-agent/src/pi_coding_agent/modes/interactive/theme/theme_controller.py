@@ -57,22 +57,38 @@ class InteractiveThemeController:
     def __init__(
         self,
         ui: ThemeControllerUi,
-        settings_manager: SettingsManager,
+        get_settings_manager: Callable[[], SettingsManager],
         show_error: Callable[[str], None],
         on_changed: Callable[[], None],
+        initial_theme_setting: str | None = None,
     ) -> None:
         self.ui = ui
-        self.settings_manager = settings_manager
+        self._get_settings_manager = get_settings_manager
         self._show_error = show_error
         self._on_changed = on_changed
+        self._current_theme_setting = initial_theme_setting
         self._terminal_theme: TerminalTheme = detect_terminal_background_from_env().theme
-        self._active_theme_name: str | None = resolve_theme_setting(
-            settings_manager.get_theme_setting(), self._terminal_theme
-        )
+        self._active_theme_name: str | None = resolve_theme_setting(self._theme_setting(), self._terminal_theme)
         self._auto_sync_enabled = False
         self._terminal_color_scheme_unsubscribe: Callable[[], None] | None = None
         init_theme(self._active_theme_name)
         self._bind_terminal_color_scheme_listener()
+
+    @property
+    def settings_manager(self) -> SettingsManager:
+        """The *current* settings manager.
+
+        Read through a callback rather than captured once: switching sessions
+        replaces `AgentSession.settings_manager`, and a captured reference
+        would keep reading the discarded session's settings.
+        """
+        return self._get_settings_manager()
+
+    def _theme_setting(self) -> str | None:
+        """The `--use-theme` override if this run has one, else the setting."""
+        if self._current_theme_setting is not None:
+            return self._current_theme_setting
+        return self.settings_manager.get_theme_setting()
 
     def rebind_tui(self) -> None:
         if self._terminal_color_scheme_unsubscribe is not None:
@@ -81,7 +97,8 @@ class InteractiveThemeController:
         self.ui.set_terminal_color_scheme_notifications(self._auto_sync_enabled)
 
     async def apply_from_settings(self) -> None:
-        theme_setting = self.settings_manager.get_theme_setting()
+        settings_manager = self.settings_manager
+        theme_setting = self._theme_setting()
         auto_theme = parse_auto_theme_setting(theme_setting)
         if auto_theme is not None:
             self._terminal_theme = await detect_terminal_theme_for_auto(self.ui, _DETECTION_TIMEOUT_MS)
@@ -102,12 +119,22 @@ class InteractiveThemeController:
         if not self._apply_theme_name(detection.theme).success:
             return
         if detection.confidence == "high":
-            self.settings_manager.set_theme(detection.theme)
-            await self.settings_manager.flush()
+            settings_manager.set_theme(detection.theme)
+            await settings_manager.flush()
+
+    def get_theme_selection(self) -> str | None:
+        return self._theme_setting() or self._active_theme_name
 
     def set_theme_name(self, theme_name: str, show_error: bool = False) -> ThemeResult:
         self._set_auto_sync(False)
-        return self._apply_theme_name(theme_name, show_error=show_error)
+        result = self._apply_theme_name(theme_name, show_error=show_error)
+        if result.success:
+            self._current_theme_setting = theme_name
+        return result
+
+    async def set_theme_setting(self, theme_setting: str) -> None:
+        self._current_theme_setting = theme_setting
+        await self.apply_from_settings()
 
     def set_theme_instance(self, theme_instance: Theme) -> ThemeResult:
         self._set_auto_sync(False)
@@ -157,7 +184,7 @@ class InteractiveThemeController:
         if not self._auto_sync_enabled:
             return
         self._terminal_theme = terminal_theme
-        auto_theme = parse_auto_theme_setting(self.settings_manager.get_theme_setting())
+        auto_theme = parse_auto_theme_setting(self._theme_setting())
         if auto_theme is None:
             self._set_auto_sync(False)
             return

@@ -35,6 +35,23 @@ Select a theme via `/settings` or in `settings.json`:
 
 On first run, pp detects the terminal background and defaults to `dark` or `light`. Automatic light/dark settings use `"light-theme/dark-theme"`.
 
+### Initial Theme
+
+Start an interactive run with a theme without changing the saved setting:
+
+```bash
+pp --use-theme light
+```
+
+To follow terminal appearance, use `lightTheme/darkTheme` syntax:
+
+```bash
+pp --use-theme light/dark
+```
+
+The CLI value is the initial theme for that run. Choosing another theme later in `/settings` applies it immediately
+and saves it normally.
+
 ## Creating a Custom Theme
 
 1. Create a theme file:

@@ -1,9 +1,11 @@
-"""Python port of `packages/coding-agent/src/modes/interactive/theme/theme-controller.ts`.
+"""Python port of `packages/coding-agent/src/modes/interactive/theme/theme-controller.ts`
+and of `packages/coding-agent/test/theme-controller.test.ts`.
 
-There is no TypeScript test file for `theme-controller.ts`; these tests pin the
-behaviour the TypeScript source encodes, because the port previously had no
-counterpart at all and the interactive mode did theme handling inline (dropping
-auto theme pairs at startup and never enabling terminal color-scheme sync).
+The tests below the "initial theme setting" heading are the ports of upstream's
+test file. The rest predate it: they pin behaviour the TypeScript source
+encodes but never tested, because this port previously had no counterpart at
+all and the interactive mode did theme handling inline (dropping auto theme
+pairs at startup and never enabling terminal color-scheme sync).
 """
 
 from __future__ import annotations
@@ -87,6 +89,7 @@ class FakeSettings:
 
 def _make(
     theme_setting: str | None = None,
+    initial_theme_setting: str | None = None,
     **ui_kwargs: Any,
 ) -> tuple[InteractiveThemeController, FakeUi, FakeSettings, list[str], list[int]]:
     ui = FakeUi(**ui_kwargs)
@@ -95,9 +98,10 @@ def _make(
     changed: list[int] = []
     controller = InteractiveThemeController(
         ui,  # type: ignore[arg-type]
-        settings,  # type: ignore[arg-type]
+        lambda: settings,  # type: ignore[arg-type,return-value]
         errors.append,
         lambda: changed.append(1),
+        initial_theme_setting,
     )
     return controller, ui, settings, errors, changed
 
@@ -375,3 +379,101 @@ def test_rebind_tui_replaces_the_listener_and_restores_the_notification_state():
 
     ui.emit_color_scheme("light")
     assert current_theme.name == "light"
+
+
+# --------------------------------------------------------------------------
+# initial theme setting (--use-theme)
+#
+# Port of `packages/coding-agent/test/theme-controller.test.ts`.
+# --------------------------------------------------------------------------
+
+
+def _make_with_managers(
+    managers: list[FakeSettings],
+    initial_theme_setting: str | None = None,
+    **ui_kwargs: Any,
+) -> tuple[InteractiveThemeController, FakeUi, Callable[[FakeSettings], None]]:
+    """A controller whose settings manager can be swapped out, as on session switch."""
+    ui = FakeUi(**ui_kwargs)
+    current = managers[0]
+
+    def select(manager: FakeSettings) -> None:
+        nonlocal current
+        current = manager
+
+    controller = InteractiveThemeController(
+        ui,  # type: ignore[arg-type]
+        lambda: current,  # type: ignore[arg-type,return-value]
+        lambda _message: None,
+        lambda: None,
+        initial_theme_setting,
+    )
+    return controller, ui, select
+
+
+def test_uses_the_initial_theme_without_persisting_it():
+    controller, ui, settings, _errors, _changed = _make("dark", initial_theme_setting="light")
+
+    assert current_theme.name == "light"
+    assert controller.get_theme_selection() == "light"
+    asyncio.run(controller.apply_from_settings())
+
+    # No terminal query: the theme was already decided by --use-theme.
+    assert ui.background is None
+    assert settings.set_calls == []
+    assert settings.flush_count == 0
+
+
+def test_resolves_a_theme_pair_and_follows_terminal_appearance_changes(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("COLORFGBG", "15;0")
+    controller, ui, _settings, _errors, _changed = _make(
+        "dark/light", initial_theme_setting="light/dark", color_scheme="light"
+    )
+
+    assert current_theme.name == "dark"
+    asyncio.run(controller.apply_from_settings())
+    assert current_theme.name == "light"
+    assert ui.notifications_enabled is True
+
+    ui.emit_color_scheme("dark")
+    assert current_theme.name == "dark"
+
+
+def test_detects_the_current_terminal_appearance_when_selecting_a_theme_pair(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("COLORFGBG", "")
+    controller, _ui, _settings, _errors, _changed = _make("dark", color_scheme="light")
+
+    assert current_theme.name == "dark"
+    asyncio.run(controller.set_theme_setting("light/dark"))
+    assert current_theme.name == "light"
+
+
+def test_an_explicit_selection_replaces_the_initial_theme():
+    first = FakeSettings("dark")
+    second = FakeSettings("light")
+    controller, _ui, select = _make_with_managers([first, second], initial_theme_setting="light")
+    asyncio.run(controller.apply_from_settings())
+
+    assert controller.set_theme_name("dark").success is True
+    select(second)
+    asyncio.run(controller.apply_from_settings())
+
+    assert controller.get_theme_selection() == "dark"
+    assert current_theme.name == "dark"
+
+
+def test_reloads_theme_settings_when_no_initial_theme_was_supplied():
+    first = FakeSettings("dark")
+    second = FakeSettings("light")
+    controller, _ui, select = _make_with_managers([first, second])
+    asyncio.run(controller.apply_from_settings())
+    assert current_theme.name == "dark"
+
+    first.theme_setting = "light"
+    asyncio.run(controller.apply_from_settings())
+    assert current_theme.name == "light"
+
+    second.theme_setting = "dark"
+    select(second)
+    asyncio.run(controller.apply_from_settings())
+    assert current_theme.name == "dark"

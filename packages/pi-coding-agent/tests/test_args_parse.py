@@ -233,6 +233,25 @@ def test_parses_multiple_theme_flags() -> None:
     assert result.themes == ["./dark.json", "./light.json"]
 
 
+def test_parses_use_theme() -> None:
+    assert parse_args(["--use-theme", "light/dark"]).use_theme == "light/dark"
+
+
+def test_use_theme_without_a_name_is_an_error() -> None:
+    result = parse_args(["--use-theme"])
+
+    assert result.use_theme is None
+    assert [d.message for d in result.diagnostics] == ["--use-theme requires a theme name"]
+
+
+def test_use_theme_does_not_swallow_the_next_flag() -> None:
+    result = parse_args(["--use-theme", "--verbose"])
+
+    assert result.use_theme is None
+    assert result.verbose is True
+    assert [d.message for d in result.diagnostics] == ["--use-theme requires a theme name"]
+
+
 def test_parses_no_skills_flag() -> None:
     assert parse_args(["--no-skills"]).no_skills is True
 

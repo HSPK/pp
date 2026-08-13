@@ -330,6 +330,9 @@ async def build_session_runtime(
     settings_manager = SettingsManager.create(
         cwd, agent_dir, SettingsManagerCreateOptions(project_trusted=project_trusted)
     )
+    if parsed.use_theme is not None:
+        # In-memory only: --use-theme must not be written back to settings.json.
+        settings_manager.apply_overrides({"theme": parsed.use_theme})
 
     async def pick_session(pick_cwd: str, pick_session_dir: str | None) -> str | None:
         """`--resume`'s interactive picker. Only reachable on a TTY."""
@@ -500,6 +503,7 @@ async def run_interactive_mode(runtime: AgentSessionRuntime, parsed: Args, proce
             initial_messages=list(parsed.messages),
             verbose=bool(parsed.verbose),
             tui_mode=parsed.tui_mode,
+            initial_theme_setting=parsed.use_theme,
         ),
     )
     print_timings()

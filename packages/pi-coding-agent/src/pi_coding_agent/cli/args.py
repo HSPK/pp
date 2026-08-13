@@ -66,6 +66,7 @@ class Args:
     prompt_templates: list[str] | None = None
     no_prompt_templates: bool | None = None
     themes: list[str] | None = None
+    use_theme: str | None = None
     no_themes: bool | None = None
     no_context_files: bool | None = None
     list_models: str | bool | None = None
@@ -208,6 +209,12 @@ def parse_args(argv: list[str]) -> Args:
             index += 1
             result.themes = result.themes or []
             result.themes.append(argv[index])
+        elif arg == "--use-theme":
+            if following is None or following.startswith("-"):
+                result.diagnostics.append(Diagnostic("error", "--use-theme requires a theme name"))
+            else:
+                result.use_theme = following
+                index += 1
         elif arg in ("--no-skills", "-ns"):
             result.no_skills = True
         elif arg in ("--no-prompt-templates", "-np"):
@@ -311,6 +318,7 @@ Options:
   --prompt-template <path>       Load a prompt template file or directory (can be used multiple times)
   --no-prompt-templates, -np     Disable prompt template discovery and loading
   --theme <path>                 Load a theme file or directory (can be used multiple times)
+  --use-theme <name[/name]>      Set the initial interactive theme for this run
   --no-themes                    Disable theme discovery and loading
   --no-context-files, -nc        Disable AGENTS.md and CLAUDE.md discovery and loading
   --export <file>                Export session file to HTML and exit (not ported)

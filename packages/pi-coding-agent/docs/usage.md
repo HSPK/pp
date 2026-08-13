@@ -222,6 +222,7 @@ Built-in tools: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`.
 | `--prompt-template <path>` | Parsed but not currently passed to the session resource loader |
 | `--no-prompt-templates`, `-np` | Parsed but not currently passed to the session resource loader |
 | `--theme <path>` | Parsed but not currently passed to startup theme loading |
+| `--use-theme <name[/name]>` | Set the initial interactive theme for this run without changing settings |
 | `--no-themes` | Parsed but not currently passed to startup theme loading |
 | `--no-context-files`, `-nc` | Parsed but not currently passed to the session resource loader |
 

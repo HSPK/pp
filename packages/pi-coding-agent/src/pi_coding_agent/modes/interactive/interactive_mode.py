@@ -300,6 +300,8 @@ class InteractiveModeOptions:
     initial_messages: list[str] = field(default_factory=list)
     verbose: bool = False
     tui_mode: str | None = None
+    initial_theme_setting: str | None = None
+    """`--use-theme`: the theme for this run only, never written to settings."""
 
 
 def create_interactive_tui(
@@ -484,9 +486,10 @@ class InteractiveMode:
         set_registered_themes([])
         self.theme_controller = InteractiveThemeController(
             self.ui,
-            self.settings_manager,
+            lambda: self.settings_manager,
             self.show_error,
             self._update_editor_border_color,
+            self.options.initial_theme_setting,
         )
 
     # -- convenience accessors ---------------------------------------------
@@ -2526,7 +2529,7 @@ class InteractiveMode:
             http_idle_timeout_ms=settings.get_http_idle_timeout_ms(),
             thinking_level=self.session.thinking_level or "off",
             available_thinking_levels=self.session.get_available_thinking_levels(),
-            current_theme=settings.get_theme_setting() or "dark",
+            current_theme=self.theme_controller.get_theme_selection() or "dark",
             terminal_theme=self.theme_controller.get_terminal_theme(),
             available_themes=get_available_themes(),
             hide_thinking_block=self.hide_thinking_block,
@@ -2697,7 +2700,7 @@ class InteractiveMode:
 
     def _apply_theme(self, name: str) -> None:
         self.settings_manager.set_theme(name)
-        spawn(self.theme_controller.apply_from_settings())
+        spawn(self.theme_controller.set_theme_setting(name))
 
     def _preview_theme(self, name: str) -> None:
         self.theme_controller.preview(name)
