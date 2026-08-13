@@ -154,31 +154,33 @@ async def test_ensure_tool_returns_an_already_installed_binary(tmp_path, monkeyp
 
     monkeypatch.setattr(tools_manager, "download_tool", must_not_download)
 
-    assert await ensure_tool("rg", silent=True, bin_dir=str(tmp_path)) == str(managed)
+    assert await ensure_tool("rg", bin_dir=str(tmp_path)) == str(managed)
 
 
 @pytest.mark.asyncio
-async def test_ensure_tool_skips_the_download_in_offline_mode(tmp_path, monkeypatch, capsys):
+async def test_ensure_tool_skips_the_download_in_offline_mode(tmp_path, monkeypatch):
     monkeypatch.setenv("PI_OFFLINE", "1")
     monkeypatch.setattr(tools_manager, "current_platform", lambda: "linux")
     monkeypatch.setattr(tools_manager, "command_exists", lambda name: False)
 
-    assert await ensure_tool("rg", bin_dir=str(tmp_path)) is None
-    assert "Offline mode enabled" in capsys.readouterr().out
+    seen: list[tools_manager.ToolStatus] = []
+    assert await ensure_tool("rg", seen.append, bin_dir=str(tmp_path)) is None
+    assert [(s.type, "Offline mode enabled" in s.message) for s in seen] == [("warning", True)]
 
 
 @pytest.mark.asyncio
-async def test_ensure_tool_points_android_users_at_the_termux_package(tmp_path, monkeypatch, capsys):
+async def test_ensure_tool_points_android_users_at_the_termux_package(tmp_path, monkeypatch):
     monkeypatch.delenv("PI_OFFLINE", raising=False)
     monkeypatch.setattr(tools_manager, "current_platform", lambda: "android")
     monkeypatch.setattr(tools_manager, "command_exists", lambda name: False)
 
-    assert await ensure_tool("rg", bin_dir=str(tmp_path)) is None
-    assert "pkg install ripgrep" in capsys.readouterr().out
+    seen: list[tools_manager.ToolStatus] = []
+    assert await ensure_tool("rg", seen.append, bin_dir=str(tmp_path)) is None
+    assert [(s.type, "pkg install ripgrep" in s.message) for s in seen] == [("warning", True)]
 
 
 @pytest.mark.asyncio
-async def test_ensure_tool_returns_none_when_the_download_fails(tmp_path, monkeypatch, capsys):
+async def test_ensure_tool_returns_none_when_the_download_fails(tmp_path, monkeypatch):
     monkeypatch.delenv("PI_OFFLINE", raising=False)
     monkeypatch.setattr(tools_manager, "current_platform", lambda: "linux")
     monkeypatch.setattr(tools_manager, "command_exists", lambda name: False)
@@ -188,12 +190,15 @@ async def test_ensure_tool_returns_none_when_the_download_fails(tmp_path, monkey
 
     monkeypatch.setattr(tools_manager, "download_tool", failing_download)
 
-    assert await ensure_tool("rg", bin_dir=str(tmp_path)) is None
-    assert "Failed to download ripgrep" in capsys.readouterr().out
+    seen: list[tools_manager.ToolStatus] = []
+    assert await ensure_tool("rg", seen.append, bin_dir=str(tmp_path)) is None
+    # The download attempt is announced first, then its failure.
+    assert [s.type for s in seen] == ["info", "warning"]
+    assert "Failed to download ripgrep" in seen[-1].message
 
 
 @pytest.mark.asyncio
-async def test_ensure_tool_installs_and_reports_the_path(tmp_path, monkeypatch, capsys):
+async def test_ensure_tool_installs_and_reports_the_path(tmp_path, monkeypatch):
     monkeypatch.delenv("PI_OFFLINE", raising=False)
     monkeypatch.setattr(tools_manager, "current_platform", lambda: "linux")
     monkeypatch.setattr(tools_manager, "command_exists", lambda name: False)
@@ -203,12 +208,39 @@ async def test_ensure_tool_installs_and_reports_the_path(tmp_path, monkeypatch, 
 
     monkeypatch.setattr(tools_manager, "download_tool", fake_download)
 
-    assert await ensure_tool("rg", bin_dir=str(tmp_path)) == str(Path(tmp_path) / "rg")
-    assert "installed to" in capsys.readouterr().out
+    seen: list[tools_manager.ToolStatus] = []
+    assert await ensure_tool("rg", seen.append, bin_dir=str(tmp_path)) == str(Path(tmp_path) / "rg")
+    assert [s.type for s in seen] == ["info", "info"]
+    assert "installed to" in seen[-1].message
 
 
 @pytest.mark.asyncio
 async def test_ensure_tool_rejects_an_unknown_tool(tmp_path, monkeypatch):
     monkeypatch.setattr(tools_manager, "command_exists", lambda name: False)
 
-    assert await ensure_tool("nope", silent=True, bin_dir=str(tmp_path)) is None
+    assert await ensure_tool("nope", bin_dir=str(tmp_path)) is None
+
+
+@pytest.mark.asyncio
+async def test_ensure_tool_reports_status_without_writing_to_stdout(tmp_path, monkeypatch, capsys):
+    """The TUI calls this after mounting, so a stray print draws over the frame."""
+    monkeypatch.setenv("PI_OFFLINE", "1")
+    monkeypatch.setattr(tools_manager, "current_platform", lambda: "linux")
+    monkeypatch.setattr(tools_manager, "command_exists", lambda name: False)
+
+    seen: list[tools_manager.ToolStatus] = []
+    assert await ensure_tool("rg", seen.append, bin_dir=str(tmp_path)) is None
+
+    assert [s.type for s in seen] == ["warning"]
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.asyncio
+async def test_ensure_tool_is_silent_when_the_tool_is_already_present(tmp_path, monkeypatch):
+    """Nothing to report: no download, no status."""
+    monkeypatch.setattr(tools_manager, "current_platform", lambda: "linux")
+    (tmp_path / "rg").write_text("#!/bin/sh\n")
+
+    seen: list[tools_manager.ToolStatus] = []
+    assert await ensure_tool("rg", seen.append, bin_dir=str(tmp_path)) == str(tmp_path / "rg")
+    assert seen == []

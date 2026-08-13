@@ -112,6 +112,7 @@ from ...utils.changelog import normalize_changelog_links, parse_changelog
 from ...utils.clipboard import copy_to_clipboard, read_clipboard_text
 from ...utils.open_browser import open_browser
 from ...utils.shell import kill_tracked_detached_children
+from ...utils.tools_manager import ToolStatus
 from ...utils.version_check import check_for_new_pi_version
 from .components.assistant_message import AssistantMessageComponent
 from .components.bash_execution import BashExecutionComponent
@@ -482,6 +483,7 @@ class InteractiveMode:
         # Back-to-back status lines update the previous line instead of piling
         # up; these hold the pair `show_status` last appended.
         self.last_status_spacer: Spacer | None = None
+        self._managed_tool_status_started = False
         self.last_status_text: Text | None = None
 
         self.is_bash_mode = False
@@ -1109,10 +1111,28 @@ class InteractiveMode:
         blocking startup.
         """
         fd_path, _rg_path = await asyncio.gather(
-            tools_manager.ensure_tool("fd"),
-            tools_manager.ensure_tool("rg"),
+            tools_manager.ensure_tool("fd", self._show_managed_tool_status),
+            tools_manager.ensure_tool("rg", self._show_managed_tool_status),
         )
         return fd_path
+
+    def _show_managed_tool_status(self, status: ToolStatus) -> None:
+        """Report `ensure_tool` progress in the chat.
+
+        A download can take seconds; without this the TUI just sits there.
+        `ensure_tool` used to print to stdout, which drew over the frame.
+        """
+        if not self._managed_tool_status_started:
+            self.chat_container.add_child(Spacer(1))
+            self._managed_tool_status_started = True
+        message = f"Warning: {status.message}" if status.type == "warning" else status.message
+        color = "warning" if status.type == "warning" else "dim"
+        self.chat_container.add_child(Text(theme.fg(color, message), 1, 0))
+        # These lines are not a status line, so the next `show_status` must not
+        # collapse into them.
+        self.last_status_spacer = None
+        self.last_status_text = None
+        self.ui.request_render()
 
     def _setup_autocomplete_provider(self) -> None:
         self.autocomplete_provider = self._create_base_autocomplete_provider()

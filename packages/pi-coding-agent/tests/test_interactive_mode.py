@@ -1808,6 +1808,10 @@ def test_a_user_message_is_separated_from_the_message_above_it(tmp_path: Path, m
         mode, _terminal = await _make_mode(tmp_path, monkeypatch)
         try:
             await mode.init()
+            # Startup may legitimately append status lines (a managed-tool
+            # download, for one), and this case is about message spacing, so
+            # start from an empty transcript rather than assuming one.
+            mode.chat_container.clear()
 
             mode._add_message_to_chat(UserMessage(content="first"))
             # The transcript opens flush: no leading blank row before the first

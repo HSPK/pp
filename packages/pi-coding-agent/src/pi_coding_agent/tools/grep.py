@@ -357,7 +357,7 @@ def create_grep_tool(cwd: str) -> AgentTool:
         context_value = context if context and context > 0 else 0
         effective_limit = max(1, limit if limit is not None else _DEFAULT_LIMIT)
 
-        rg_path = await tools_manager.ensure_tool("rg", silent=True)
+        rg_path = await tools_manager.ensure_tool("rg")
         if rg_path:
             output_lines, details = await _grep_via_rg(
                 rg_path,

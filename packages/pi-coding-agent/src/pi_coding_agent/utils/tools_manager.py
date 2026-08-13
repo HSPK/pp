@@ -36,6 +36,16 @@ from pi_coding_agent.core.config import APP_NAME, get_bin_dir
 from pi_coding_agent.utils.management_http import FetchRetryOptions, fetch_with_retry
 
 ManagedTool = Literal["fd", "rg"]
+ToolStatusType = Literal["info", "warning"]
+
+
+@dataclass(frozen=True)
+class ToolStatus:
+    """A progress or problem report from `ensure_tool`."""
+
+    type: ToolStatusType
+    message: str
+
 
 NETWORK_TIMEOUT_MS = 10_000
 DOWNLOAD_TIMEOUT_MS = 120_000
@@ -295,13 +305,26 @@ async def download_tool(tool: ManagedTool, bin_dir: str | None = None) -> str:
     return str(binary_path)
 
 
-async def ensure_tool(tool: ManagedTool, silent: bool = False, bin_dir: str | None = None) -> str | None:
+async def ensure_tool(
+    tool: ManagedTool,
+    on_status: Callable[[ToolStatus], None] | None = None,
+    bin_dir: str | None = None,
+) -> str | None:
     """Return a usable path for `tool`, downloading it if necessary.
+
+    Progress is reported through `on_status`; with no callback the call is
+    silent. It used to print straight to stdout, which scribbled over the TUI
+    once the interactive mode started calling this after mounting.
 
     Returns `None` when the tool is unavailable and cannot be installed --
     offline mode, Android, an unsupported platform, or a failed download. Never
     raises; callers fall back to their slower path.
     """
+
+    def report(type: ToolStatusType, message: str) -> None:
+        if on_status is not None:
+            on_status(ToolStatus(type=type, message=message))
+
     existing = get_tool_path(tool, bin_dir)
     if existing:
         return existing
@@ -311,28 +334,23 @@ async def ensure_tool(tool: ManagedTool, silent: bool = False, bin_dir: str | No
         return None
 
     if is_offline_mode_enabled():
-        if not silent:
-            print(f"{config.name} not found. Offline mode enabled, skipping download.")
+        report("warning", f"{config.name} not found. Offline mode enabled, skipping download.")
         return None
 
     if current_platform() == "android":
         package = TERMUX_PACKAGES.get(tool, tool)
-        if not silent:
-            print(f"{config.name} not found. Install with: pkg install {package}")
+        report("warning", f"{config.name} not found. Install with: pkg install {package}")
         return None
 
-    if not silent:
-        print(f"{config.name} not found. Downloading...")
+    report("info", f"{config.name} not found. Downloading...")
 
     try:
         path = await download_tool(tool, bin_dir)
     except Exception as error:
-        if not silent:
-            print(f"Failed to download {config.name}: {error}")
+        report("warning", f"Failed to download {config.name}: {error}")
         return None
 
-    if not silent:
-        print(f"{config.name} installed to {path}")
+    report("info", f"{config.name} installed to {path}")
     return path
 
 
@@ -343,6 +361,8 @@ __all__ = [
     "TOOLS",
     "ManagedTool",
     "ToolConfig",
+    "ToolStatus",
+    "ToolStatusType",
     "command_exists",
     "current_arch",
     "current_platform",
