@@ -202,7 +202,7 @@ def test_startup_ensures_both_managed_tools(tmp_path: Path, monkeypatch: pytest.
     """
     ensured: list[str] = []
 
-    async def fake_ensure_tool(tool: str, silent: bool = False, bin_dir: str | None = None) -> str | None:
+    async def fake_ensure_tool(tool: str, on_status: object = None, bin_dir: str | None = None) -> str | None:
         ensured.append(tool)
         return f"/managed/{tool}"
 
@@ -223,7 +223,7 @@ def test_startup_ensures_both_managed_tools(tmp_path: Path, monkeypatch: pytest.
 def test_startup_tolerates_unavailable_managed_tools(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Offline, Android and failed downloads all return `None`; startup goes on."""
 
-    async def fake_ensure_tool(tool: str, silent: bool = False, bin_dir: str | None = None) -> str | None:
+    async def fake_ensure_tool(tool: str, on_status: object = None, bin_dir: str | None = None) -> str | None:
         return None
 
     async def scenario() -> None:
