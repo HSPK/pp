@@ -25,6 +25,7 @@ from pi_agent.types import AgentTool, AgentToolResult
 from pi_ai.types import ImageContent, TextContent
 from pi_ai.utils.abort import AbortSignal
 
+from pi_coding_agent.core.experimental import get_experimental_tool_sampling
 from pi_coding_agent.tools.path_utils import resolve_read_path, resolve_to_cwd
 from pi_coding_agent.tools.truncate import (
     DEFAULT_MAX_BYTES,
@@ -163,6 +164,7 @@ def create_read_tool(cwd: str, *, auto_resize_images: bool = True) -> AgentTool:
             "required": ["path"],
         },
         execute=execute,
+        constrained_sampling=get_experimental_tool_sampling(),
     )
 
 

@@ -26,6 +26,7 @@ from pi_agent.types import AgentTool, AgentToolResult
 from pi_ai.types import TextContent, now_ms
 from pi_ai.utils.abort import AbortSignal
 
+from pi_coding_agent.core.experimental import get_experimental_tool_sampling
 from pi_coding_agent.tools.output_accumulator import OutputAccumulator
 from pi_coding_agent.tools.truncate import DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, TruncationResult, format_size
 from pi_coding_agent.utils.child_process import wait_for_child_streams
@@ -447,6 +448,7 @@ def create_bash_tool(
             "required": ["command"],
         },
         execute=execute,
+        constrained_sampling=get_experimental_tool_sampling(),
         prompt_guidelines=list(BASH_PROMPT_GUIDELINES) if expose_session_environment else [],
     )
 

@@ -20,6 +20,7 @@ from pi_agent.types import AgentTool, AgentToolResult
 from pi_ai.types import TextContent
 from pi_ai.utils.abort import AbortSignal
 
+from pi_coding_agent.core.experimental import get_experimental_tool_sampling
 from pi_coding_agent.tools.edit_diff import (
     Edit,
     apply_edits_to_normalized_content,
@@ -210,6 +211,7 @@ def create_edit_tool(cwd: str, operations: EditOperations | None = None) -> Agen
             "required": ["path", "edits"],
         },
         execute=execute,
+        constrained_sampling=get_experimental_tool_sampling(),
     )
     tool.prepare_arguments = _prepare_edit_arguments
     return tool

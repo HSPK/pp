@@ -14,6 +14,7 @@ from pi_agent.types import AgentTool, AgentToolResult
 from pi_ai.types import TextContent
 from pi_ai.utils.abort import AbortSignal
 
+from pi_coding_agent.core.experimental import get_experimental_tool_sampling
 from pi_coding_agent.tools.file_mutation_queue import with_file_mutation_queue
 from pi_coding_agent.tools.path_utils import resolve_to_cwd
 
@@ -91,6 +92,7 @@ def create_write_tool(cwd: str, operations: WriteOperations | None = None) -> Ag
             "required": ["path", "content"],
         },
         execute=execute,
+        constrained_sampling=get_experimental_tool_sampling(),
     )
 
 
