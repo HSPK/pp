@@ -1005,12 +1005,18 @@ class InteractiveMode:
             self._update_editor_border_color()
 
     def _update_editor_border_color(self) -> None:
-        editor_theme = get_editor_theme()
+        # `Editor` copies `theme.border_color` into its own public
+        # `border_color` at construction (`editor.py:421`) and renders from
+        # that, so replacing `_theme` changed a field nothing reads and the
+        # border never moved -- shift+tab cycled the thinking level with no
+        # visible feedback. TypeScript assigns `this.editor.borderColor`
+        # directly (`interactive-mode.ts:3996`).
         if self.is_bash_mode:
-            editor_theme.border_color = theme.get_bash_mode_border_color()
+            border_color = theme.get_bash_mode_border_color()
         else:
-            editor_theme.border_color = theme.get_thinking_border_color(self.session.thinking_level)
-        self.default_editor._theme = editor_theme
+            border_color = theme.get_thinking_border_color(self.session.thinking_level)
+        self.default_editor.border_color = border_color
+        self.default_editor.invalidate()
         self.ui.request_render()
 
     def _handle_escape(self) -> None:
