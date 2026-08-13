@@ -95,7 +95,6 @@ from ...core.config import (
     APP_TITLE,
     VERSION,
     get_agent_dir,
-    get_bin_dir,
     get_changelog_path,
     get_debug_log_path,
     get_share_viewer_url,
@@ -107,6 +106,7 @@ from ...core.model_resolver import ScopedModel, find_exact_model_reference_match
 from ...core.session_cwd import MissingSessionCwdError, format_missing_session_cwd_prompt
 from ...core.slash_commands import BUILTIN_SLASH_COMMANDS, find_builtin_slash_command
 from ...core.trust_manager import ProjectTrustStore
+from ...utils import tools_manager
 from ...utils.changelog import normalize_changelog_links, parse_changelog
 from ...utils.clipboard import copy_to_clipboard, read_clipboard_text
 from ...utils.open_browser import open_browser
@@ -539,7 +539,7 @@ class InteractiveMode:
         self._mount_layout()
         self.ui.set_focus(self.editor)
 
-        self.fd_path = self._resolve_fd_path()
+        self.fd_path = await self._ensure_managed_tools()
         self._setup_key_handlers()
         self._setup_editor_submit_handler()
         self._apply_runtime_settings()
@@ -1091,24 +1091,21 @@ class InteractiveMode:
 
         return CombinedAutocompleteProvider(list(commands), self.session_manager.get_cwd(), self.fd_path)
 
-    def _resolve_fd_path(self) -> str | None:
-        """Locate ``fd``, used for `@`-prefixed file completion.
+    async def _ensure_managed_tools(self) -> str | None:
+        """Download `fd` and `rg` if missing, and return the `fd` path.
 
-        TypeScript's ``ensureTool("fd")`` (``utils/tools-manager.ts``) downloads
-        a pinned binary into the agent's ``bin`` directory when it is missing.
-        That downloader is not ported, so this only looks for an already
-        installed binary: the agent bin directory first, then ``PATH``.
-        Debian and Ubuntu ship the binary as ``fdfind``.
+        Port of TS's `Promise.all([ensureTool("fd"), ensureTool("rg")])` in
+        `init()`. Both matter here: `fd` backs `@`-file completion, and `rg`
+        backs the grep tool and any bash command that calls it. `ensure_tool`
+        never raises -- it returns `None` offline, on Android, or on a failed
+        download -- so a missing binary degrades the feature instead of
+        blocking startup.
         """
-        for candidate in ("fd", "fdfind"):
-            in_bin_dir = Path(get_bin_dir()) / candidate
-            if in_bin_dir.is_file() and os.access(in_bin_dir, os.X_OK):
-                return str(in_bin_dir)
-        for candidate in ("fd", "fdfind"):
-            found = shutil.which(candidate)
-            if found:
-                return found
-        return None
+        fd_path, _rg_path = await asyncio.gather(
+            tools_manager.ensure_tool("fd"),
+            tools_manager.ensure_tool("rg"),
+        )
+        return fd_path
 
     def _setup_autocomplete_provider(self) -> None:
         self.autocomplete_provider = self._create_base_autocomplete_provider()

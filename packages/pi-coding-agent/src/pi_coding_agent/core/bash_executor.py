@@ -22,6 +22,7 @@ from typing import IO, Protocol
 
 from pi_ai.utils.abort import AbortSignal
 
+from pi_coding_agent.core.config import get_bin_dir
 from pi_coding_agent.tools.bash import _exec_local
 from pi_coding_agent.tools.output_accumulator import _StreamingUtf8Decoder
 from pi_coding_agent.tools.truncate import DEFAULT_MAX_BYTES, truncate_tail
@@ -71,7 +72,13 @@ class _LocalBashOperations:
         env: dict[str, str] | None,
     ) -> int | None:
         return await _exec_local(
-            command, cwd, on_data, signal, timeout, env if env is not None else get_shell_env(), self.shell_path
+            command,
+            cwd,
+            on_data,
+            signal,
+            timeout,
+            env if env is not None else get_shell_env(get_bin_dir()),
+            self.shell_path,
         )
 
 

@@ -19,11 +19,39 @@ from pi_coding_agent.utils.shell import (
 def test_get_shell_env_returns_a_copy(monkeypatch):
     monkeypatch.setenv("PI_SHELL_TEST", "value")
 
-    env = get_shell_env()
+    env = get_shell_env("/tmp/pi-bin")
 
     assert env["PI_SHELL_TEST"] == "value"
     env["PI_SHELL_TEST"] = "changed"
     assert os.environ["PI_SHELL_TEST"] == "value"
+
+
+def test_get_shell_env_prepends_the_managed_bin_directory(monkeypatch):
+    """A bash command must find the `rg`/`fd` that `ensure_tool` downloaded."""
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+
+    env = get_shell_env("/tmp/pi-bin")
+
+    assert env["PATH"] == f"/tmp/pi-bin{os.pathsep}/usr/bin:/bin"
+
+
+def test_get_shell_env_does_not_add_the_bin_directory_twice(monkeypatch):
+    monkeypatch.setenv("PATH", f"/tmp/pi-bin{os.pathsep}/usr/bin")
+
+    env = get_shell_env("/tmp/pi-bin")
+
+    assert env["PATH"] == f"/tmp/pi-bin{os.pathsep}/usr/bin"
+
+
+def test_get_shell_env_reuses_the_existing_path_key_casing(monkeypatch):
+    """Windows spells it `Path`; a second `PATH` key would shadow the real one."""
+    monkeypatch.delenv("PATH", raising=False)
+    monkeypatch.setenv("Path", "/usr/bin")
+
+    env = get_shell_env("/tmp/pi-bin")
+
+    assert env["Path"] == f"/tmp/pi-bin{os.pathsep}/usr/bin"
+    assert "PATH" not in env
 
 
 def test_sanitize_binary_output_preserves_allowed_line_control_characters():

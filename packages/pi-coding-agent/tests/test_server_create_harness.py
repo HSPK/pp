@@ -32,7 +32,6 @@ environment-construction behavior against a real child process.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +43,7 @@ from pi_agent.types import AgentTool, AgentToolResult
 from pi_ai.types import Model, TextContent
 from pi_ai.utils.retry import RetryPolicy
 from pi_coding_agent import tools as _tools_module
+from pi_coding_agent.core.config import get_bin_dir
 from pi_coding_agent.core.skills import Skill
 from pi_coding_agent.core.source_info import SourceInfo
 from pi_coding_agent.core.system_prompt import BuildSystemPromptOptions, ContextFile
@@ -55,6 +55,7 @@ from pi_coding_agent.server import (
     create_coding_agent_harness,
     create_coding_agent_harness_tools,
 )
+from pi_coding_agent.utils.shell import get_shell_env
 
 
 def _install_capturing_bash_tool(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, str]]:
@@ -367,7 +368,7 @@ async def test_sets_the_optional_session_file_in_the_default_bash_tool_environme
         # checking only the five keys) also catches an extra/leaked key, which a
         # subset check would miss.
         assert len(captured_envs) == 1
-        expected_env = dict(os.environ)
+        expected_env = get_shell_env(get_bin_dir())
         expected_env.update(
             {
                 "PI_SESSION_ID": "session-file-harness",
@@ -426,7 +427,7 @@ async def test_keeps_bash_pi_model_variables_synchronized_with_harness_state(
         # calls, proving the bash tool reads harness state live at execution time
         # rather than snapshotting it at tool creation.
         assert len(captured_envs) == 1
-        expected_env = dict(os.environ)
+        expected_env = get_shell_env(get_bin_dir())
         expected_env.update(
             {
                 "PI_SESSION_ID": "dynamic-bash-session",

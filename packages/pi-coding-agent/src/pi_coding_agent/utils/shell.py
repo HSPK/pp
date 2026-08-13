@@ -2,9 +2,7 @@
 
 Python port of the subset of `packages/coding-agent/src/utils/shell.ts` the
 bash tool needs: shell resolution, environment preparation, output
-sanitization and detached child tracking. The bundled-binary `PATH` injection
-in the TypeScript version has no Python equivalent here (no bundled `fd`/`rg`
-binaries are shipped) and is not ported.
+sanitization and detached child tracking.
 """
 
 from __future__ import annotations
@@ -169,9 +167,29 @@ def kill_process_tree(pid: int) -> None:
             os.kill(pid, signal.SIGKILL)
 
 
-def get_shell_env() -> dict[str, str]:
-    """Return a copy of the current process environment for spawning a shell."""
-    return dict(os.environ)
+def get_shell_env(bin_dir: str) -> dict[str, str]:
+    """The environment for a spawned shell, with `bin_dir` prepended to `PATH`.
+
+    `ensure_tool` downloads `fd` and `rg` into the agent's `bin` directory,
+    which is not on the user's `PATH`. Without this prepend a bash command
+    running `rg` would not find the copy pi installed for it.
+
+    TypeScript's `getShellEnv()` reads `getBinDir()` itself. Here the directory
+    is a required argument instead: importing `core.config` from this module
+    closes an import cycle (`core` -> ... -> `tools.bash` -> `utils.shell`).
+    Requiring it means a new caller gets a `TypeError` rather than silently
+    spawning shells that cannot see the managed binaries.
+
+    The `PATH` key is matched case-insensitively because Windows spells it
+    `Path`, and adding a second `PATH` entry there would shadow the real one.
+    """
+    env = dict(os.environ)
+    path_key = next((key for key in env if key.lower() == "path"), "PATH")
+    current_path = env.get(path_key, "")
+    entries = [entry for entry in current_path.split(os.pathsep) if entry]
+    if bin_dir not in entries:
+        env[path_key] = os.pathsep.join([bin_dir, *([current_path] if current_path else [])])
+    return env
 
 
 def sanitize_binary_output(text: str) -> str:

@@ -26,6 +26,7 @@ from pi_agent.types import AgentTool, AgentToolResult
 from pi_ai.types import TextContent, now_ms
 from pi_ai.utils.abort import AbortSignal
 
+from pi_coding_agent.core.config import get_bin_dir
 from pi_coding_agent.core.experimental import get_experimental_tool_sampling
 from pi_coding_agent.tools.output_accumulator import OutputAccumulator
 from pi_coding_agent.tools.truncate import DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, TruncationResult, format_size
@@ -383,7 +384,7 @@ def create_bash_tool(
         def append_status(text: str, status: str) -> str:
             return f"{text}\n\n{status}" if text else status
 
-        env = get_shell_env()
+        env = get_shell_env(get_bin_dir())
         for name in _SESSION_ENV_NAMES:
             env.pop(name, None)
         if expose_session_environment and session_environment is not None:

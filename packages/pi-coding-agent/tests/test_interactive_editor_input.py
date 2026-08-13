@@ -22,6 +22,7 @@ from pi_coding_agent.modes.interactive.interactive_mode import (
     InteractiveMode,
     InteractiveModeOptions,
 )
+from pi_coding_agent.utils import tools_manager
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "pi-tui" / "tests"))
 from fakes import FakeTerminal
@@ -191,20 +192,48 @@ def test_escape_dismisses_the_popup_without_interrupting(tmp_path: Path, monkeyp
     _run(scenario())
 
 
-def test_fd_is_resolved_from_path_when_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    import shutil as shutil_module
+def test_startup_ensures_both_managed_tools(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """`fd` backs `@` completion; `rg` backs the grep tool and bash commands.
+
+    TypeScript's `init()` awaits `ensureTool` for both, which downloads a
+    pinned binary when one is missing. Resolving only `fd`, and only from
+    `PATH`, left `rg` to be fetched lazily by the grep tool and never made
+    either binary reachable from a bash command.
+    """
+    ensured: list[str] = []
+
+    async def fake_ensure_tool(tool: str, silent: bool = False, bin_dir: str | None = None) -> str | None:
+        ensured.append(tool)
+        return f"/managed/{tool}"
 
     async def scenario() -> None:
+        monkeypatch.setattr(tools_manager, "ensure_tool", fake_ensure_tool)
         mode = await _make_mode(tmp_path, monkeypatch)
         try:
             await mode.init()
-            installed = shutil_module.which("fd") or shutil_module.which("fdfind")
-            if installed:
-                assert mode.fd_path is not None
-            else:
-                # The TypeScript downloader is not ported, so a missing binary
-                # simply disables `@` completion rather than fetching one.
-                assert mode.fd_path is None
+
+            assert sorted(ensured) == ["fd", "rg"]
+            assert mode.fd_path == "/managed/fd"
+        finally:
+            await mode.shutdown()
+
+    _run(scenario())
+
+
+def test_startup_tolerates_unavailable_managed_tools(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Offline, Android and failed downloads all return `None`; startup goes on."""
+
+    async def fake_ensure_tool(tool: str, silent: bool = False, bin_dir: str | None = None) -> str | None:
+        return None
+
+    async def scenario() -> None:
+        monkeypatch.setattr(tools_manager, "ensure_tool", fake_ensure_tool)
+        mode = await _make_mode(tmp_path, monkeypatch)
+        try:
+            await mode.init()
+
+            assert mode.fd_path is None
+            assert mode.is_initialized is True
         finally:
             await mode.shutdown()
 
