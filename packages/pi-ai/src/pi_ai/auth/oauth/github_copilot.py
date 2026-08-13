@@ -1,22 +1,21 @@
 """GitHub Copilot OAuth flow.
 
-Python port of `packages/ai/src/auth/oauth/github-copilot.ts`. The upstream
-flow also enables every catalog model for the user's account after login
-(`enableAllGitHubCopilotModels`); that step depends on the TypeScript
-`GITHUB_COPILOT_MODELS` catalog, which this port has not built yet (see the
-pp README's provider status table), so `login_github_copilot` accepts the
-model ids to enable as a parameter (default: none) instead of hard-coding an
-unported catalog import.
+Python port of `packages/ai/src/auth/oauth/github-copilot.ts`. After login the
+flow enables every catalog model for the user's account
+(`enableAllGitHubCopilotModels`), reading the same generated
+`github-copilot` catalog shard that the provider uses.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import re
 from urllib.parse import urlparse
 
 import httpx
 
+from ...model_catalog import load_models
 from ...utils.abort import AbortSignal
 from ...utils.url import normalize_http_url
 from ..types import AuthEvent, AuthInteraction, AuthPrompt, Credential, OAuthAuth, ResolvedAuth
@@ -32,6 +31,8 @@ COPILOT_HEADERS = {
 }
 COPILOT_API_VERSION = "2026-06-01"
 REQUEST_TIMEOUT_S = 30.0
+
+COPILOT_POLICY_CONCURRENCY = 4
 DEFAULT_MODELS_TIMEOUT_S = 5.0
 
 
@@ -289,6 +290,24 @@ async def enable_github_copilot_model(
             await http_client.aclose()
 
 
+async def enable_all_github_copilot_models(
+    token: str, enterprise_domain: str | None, client: httpx.AsyncClient | None = None
+) -> None:
+    """Enable every catalog model that may require policy acceptance.
+
+    Called after a successful login so all models are usable. Requests run in
+    batches of ``COPILOT_POLICY_CONCURRENCY`` rather than all at once: the
+    catalog holds dozens of models, and firing every policy request in parallel
+    made GitHub reject the burst.
+    """
+    model_ids = [model.id for model in load_models("github-copilot")]
+    for index in range(0, len(model_ids), COPILOT_POLICY_CONCURRENCY):
+        batch = model_ids[index : index + COPILOT_POLICY_CONCURRENCY]
+        await asyncio.gather(
+            *(enable_github_copilot_model(token, model_id, enterprise_domain, client) for model_id in batch)
+        )
+
+
 def copilot_enterprise_domain(credential: Credential) -> str | None:
     enterprise_url = credential.data.get("enterprise_url")
     if not isinstance(enterprise_url, str) or not enterprise_url:
@@ -299,7 +318,6 @@ def copilot_enterprise_domain(credential: Credential) -> str | None:
 async def login_github_copilot(
     interaction: AuthInteraction,
     *,
-    models_to_enable: tuple[str, ...] = (),
     client: httpx.AsyncClient | None = None,
     clock: DeviceCodeClock = REAL_CLOCK,
 ) -> Credential:
@@ -332,10 +350,8 @@ async def login_github_copilot(
 
     github_access_token = await poll_for_github_access_token(domain, device, interaction.signal, client, clock)
     credential = await refresh_github_copilot_access_token(github_access_token, enterprise_domain, client)
-    if models_to_enable:
-        interaction.notify(AuthEvent(type="progress", message="Enabling models..."))
-        for model_id in models_to_enable:
-            await enable_github_copilot_model(credential.access, model_id, enterprise_domain, client)
+    interaction.notify(AuthEvent(type="progress", message="Enabling models..."))
+    await enable_all_github_copilot_models(credential.access, enterprise_domain, client)
     model_ids = await fetch_available_github_copilot_model_ids(credential.access, enterprise_domain, client)
     credential.data = {**credential.data, "availableModelIds": model_ids}
     return credential

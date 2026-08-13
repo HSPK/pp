@@ -867,7 +867,6 @@ async def test_github_copilot_login_full_flow_default_domain():
     credential = await asyncio.wait_for(
         github_copilot.login_github_copilot(
             interaction,
-            models_to_enable=("claude-x",),
             client=make_client(handler),
             clock=clock.as_device_code_clock(),
         ),
@@ -876,7 +875,7 @@ async def test_github_copilot_login_full_flow_default_domain():
     assert credential.access.startswith("tid=x;")
     assert credential.refresh == "gh-access"
     assert credential.data["availableModelIds"] == ["gpt-4"]
-    assert any(url.endswith("/models/claude-x/policy") for url in calls)
+    assert any(url.endswith("/models/claude-opus-4.5/policy") for url in calls)
     device_events = [e for e in interaction.events if e.type == "device_code"]
     assert device_events[0].user_code == "USER-1"
 
@@ -907,6 +906,9 @@ async def test_github_copilot_login_full_flow_enterprise_domain():
         if request.url.path == "/models":
             assert request.url.host == "copilot-api.acme.ghe.com"
             return httpx.Response(200, json={"data": []})
+        if request.url.path.endswith("/policy"):
+            assert request.url.host == "copilot-api.acme.ghe.com"
+            return httpx.Response(200, json={})
         raise AssertionError(f"unexpected request {request.url}")
 
     credential = await asyncio.wait_for(
@@ -918,6 +920,54 @@ async def test_github_copilot_login_full_flow_enterprise_domain():
     assert credential.access == "copilot-token-2"
     assert credential.data["enterprise_url"] == "acme.ghe.com"
     assert credential.data["availableModelIds"] == []
+
+
+async def test_github_copilot_login_bounds_policy_update_concurrency():
+    clock = VirtualClock()
+    interaction = ScriptedInteraction(answers=[""])
+    active = 0
+    peak = 0
+    policy_requests = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal active, peak, policy_requests
+        if request.url.path == "/login/device/code":
+            return httpx.Response(
+                200,
+                json={
+                    "device_code": "devcode",
+                    "user_code": "USER-3",
+                    "verification_uri": "https://github.com/login/device",
+                    "interval": 1,
+                    "expires_in": 600,
+                },
+            )
+        if request.url.path == "/login/oauth/access_token":
+            return httpx.Response(200, json={"access_token": "gh-access"})
+        if request.url.path == "/copilot_internal/v2/token":
+            return httpx.Response(200, json={"token": "copilot-token", "expires_at": int(time.time()) + 1800})
+        if request.url.path == "/models":
+            return httpx.Response(200, json={"data": []})
+        if request.url.path.endswith("/policy"):
+            policy_requests += 1
+            active += 1
+            peak = max(peak, active)
+            # Yield so any sibling request in the same batch can start before
+            # this one finishes; without that the peak is always 1.
+            await asyncio.sleep(0.005)
+            active -= 1
+            return httpx.Response(200, json={})
+        raise AssertionError(f"unexpected request {request.url}")
+
+    await asyncio.wait_for(
+        github_copilot.login_github_copilot(
+            interaction, client=make_client(handler), clock=clock.as_device_code_clock()
+        ),
+        timeout=CALLBACK_TIMEOUT_S,
+    )
+    assert policy_requests > 4
+    assert peak == 4
+    assert github_copilot.COPILOT_POLICY_CONCURRENCY == 4
 
 
 async def test_github_copilot_login_invalid_enterprise_domain_raises():
