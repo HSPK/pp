@@ -129,6 +129,9 @@ def detect_compat(model: Model) -> ResolvedCompat:
     is_nvidia = provider == "nvidia" or "integrate.api.nvidia.com" in base_url
     is_ant_ling = provider == "ant-ling" or "api.ant-ling.com" in base_url
 
+    # `baseUrl.toLowerCase()` upstream: a provider configured with a
+    # mixed-case host would otherwise miss every DeepSeek-specific branch.
+    is_deepseek = provider == "deepseek" or "deepseek.com" in base_url.lower()
     is_non_standard = (
         is_nvidia
         or provider == "cerebras"
@@ -137,7 +140,7 @@ def detect_compat(model: Model) -> ResolvedCompat:
         or "api.x.ai" in base_url
         or is_together
         or "chutes.ai" in base_url
-        or "deepseek.com" in base_url
+        or is_deepseek
         or is_zai
         or is_moonshot
         or provider == "opencode"
@@ -147,7 +150,6 @@ def detect_compat(model: Model) -> ResolvedCompat:
         or is_ant_ling
     )
 
-    is_deepseek = provider == "deepseek" or "deepseek.com" in base_url
     use_max_tokens = (
         "chutes.ai" in base_url
         or is_deepseek
