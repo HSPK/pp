@@ -700,18 +700,18 @@ class SettingsManager:
         self._mark_modified("shellPath")
         self._save()
 
-    def get_version_check_repo(self) -> str | None:
-        """GitHub ``owner/name`` to check for new releases.
+    def get_version_check_package(self) -> str | None:
+        """PyPI distribution name to check for new releases.
 
         Not present upstream: TypeScript checks pi.dev's release API, while
-        this port checks GitHub Releases (see `utils/version_check.py`).
+        this port checks PyPI (see `utils/version_check.py`).
         """
-        value = self._settings.get("versionCheckRepo")
+        value = self._settings.get("versionCheckPackage")
         return value if isinstance(value, str) and value.strip() else None
 
-    def set_version_check_repo(self, repo: str | None) -> None:
-        self._global_settings["versionCheckRepo"] = repo
-        self._mark_modified("versionCheckRepo")
+    def set_version_check_package(self, package: str | None) -> None:
+        self._global_settings["versionCheckPackage"] = package
+        self._mark_modified("versionCheckPackage")
         self._save()
 
     def get_quiet_startup(self) -> bool:

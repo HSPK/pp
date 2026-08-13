@@ -93,6 +93,7 @@ from ...core.app_keybindings import KeybindingsManager
 from ...core.config import (
     APP_NAME,
     APP_TITLE,
+    PACKAGE_NAME,
     VERSION,
     get_agent_dir,
     get_changelog_path,
@@ -750,11 +751,17 @@ class InteractiveMode:
             await self._prompt_safely(user_input)
 
     async def _check_for_new_version(self) -> None:
-        """Announce a newer GitHub release, if any. Never raises."""
+        """Announce a newer PyPI release, if any. Never raises."""
         release = await check_for_new_pi_version(self.version, settings_manager=self.settings_manager)
         if release is None:
             return
-        message = f"A new version is available: {release.version} (current {self.version})"
+        package = release.package_name or PACKAGE_NAME
+        # There is no `pp update` self-update command (see package_manager.py),
+        # so tell the user the command their installer actually needs.
+        message = (
+            f"A new version is available: {release.version} (current {self.version})\n"
+            f"Run: uv tool upgrade {package}   or   pip install -U {package}"
+        )
         if release.url:
             message += f"\n{release.url}"
         self.show_status(message)

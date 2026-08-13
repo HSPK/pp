@@ -663,6 +663,7 @@ version = "0.1.0"
 source = { editable = "packages/pi-coding-agent" }
 dependencies = [
     { name = "jsonschema" },
+    { name = "packaging" },
     { name = "pillow" },
     { name = "pp-agent-core" },
     { name = "pp-ai" },
@@ -677,6 +678,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "jsonschema", specifier = ">=4.23" },
+    { name = "packaging", specifier = ">=23.0" },
     { name = "pillow", specifier = ">=11.0" },
     { name = "pp-agent-core", editable = "packages/pi-agent" },
     { name = "pp-ai", editable = "packages/pi-ai" },

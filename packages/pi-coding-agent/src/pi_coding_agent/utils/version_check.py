@@ -1,43 +1,48 @@
-"""Check GitHub Releases for a newer version.
+"""Check PyPI for a newer release of this port.
 
 Ported from ``packages/coding-agent/src/utils/version-check.ts``, with one
-deliberate change: upstream queries ``https://pi.dev/api/latest-version``,
-which only knows about the TypeScript release. This port checks a **GitHub
-repository's latest release** instead, and the repository is configurable:
+deliberate change of source: upstream queries ``https://pi.dev/api/latest-version``,
+which only knows about the TypeScript release. This port is published to PyPI,
+so it asks PyPI for the latest version of its own distribution, and the
+distribution is configurable:
 
-1. the ``repo`` argument,
-2. the ``PI_VERSION_CHECK_REPO`` environment variable,
-3. ``versionCheckRepo`` in settings.json,
-4. :data:`DEFAULT_VERSION_CHECK_REPO`.
+1. the ``package`` argument,
+2. the ``PI_VERSION_CHECK_PACKAGE`` environment variable,
+3. ``versionCheckPackage`` in settings.json,
+4. :data:`DEFAULT_VERSION_CHECK_PACKAGE` (this port's own distribution).
 
 ``PI_OFFLINE`` and ``PI_SKIP_VERSION_CHECK`` are honoured exactly as upstream.
-The semver comparison and the errno-detail error formatting are direct ports.
+The errno-detail error formatting is a direct port.
+
+**Version comparison uses PEP 440, not semver.** Upstream compares with
+``semver``, which cannot parse the versions PyPI actually serves: ``1.0`` has
+too few components, and ``0.2.0rc1`` / ``0.2.0.post1`` / ``0.2.0.dev1`` are
+spelled without semver's ``-`` separator. Every one of those parsed as "not a
+version" and fell through to a string comparison that reported any difference
+as an upgrade -- including a *downgrade* to a release candidate.
+
+**Pre-releases are PyPI's call, not ours.** The JSON API's ``info.version`` is
+the latest *stable* release; the ``/simple/`` listing is not filtered, so its
+last entry can be a dev release that must never be offered as an update.
 """
 
 from __future__ import annotations
 
 import os
 import platform
-import re
 import sys
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
+from packaging.version import InvalidVersion, Version
 
+from ..core.config import PACKAGE_NAME
 from .management_http import FetchRetryOptions, fetch_with_retry
 
-DEFAULT_VERSION_CHECK_REPO = "earendil-works/pi"
-GITHUB_API_BASE = "https://api.github.com"
+DEFAULT_VERSION_CHECK_PACKAGE = PACKAGE_NAME
+PYPI_API_BASE = "https://pypi.org/pypi"
 DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10_000
-
-# semver "valid" subset: major.minor.patch with optional prerelease/build.
-_SEMVER_RE = re.compile(
-    r"^v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
-    r"(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
-    r"(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?"
-    r"(?:\+(?P<build>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
-)
 
 
 @dataclass
@@ -78,80 +83,54 @@ def format_version_check_error(error: BaseException) -> str:
     return f"{root_message} (cause: {cause_message})" if cause_message else root_message
 
 
-def _parse_semver(value: str) -> tuple[int, int, int, tuple[Any, ...]] | None:
-    match = _SEMVER_RE.match(value.strip())
-    if match is None:
+def _parse_version(value: str) -> Version | None:
+    try:
+        return Version(value.strip())
+    except InvalidVersion:
         return None
-    prerelease = match.group("prerelease")
-    if prerelease is None:
-        # No prerelease sorts *above* any prerelease, so use a sentinel.
-        identifiers: tuple[Any, ...] = ()
-    else:
-        identifiers = tuple(int(part) if part.isdigit() else part for part in prerelease.split("."))
-    return int(match.group("major")), int(match.group("minor")), int(match.group("patch")), identifiers
-
-
-def _compare_prerelease(left: tuple[Any, ...], right: tuple[Any, ...]) -> int:
-    if not left and not right:
-        return 0
-    if not left:
-        return 1
-    if not right:
-        return -1
-    for left_part, right_part in zip(left, right, strict=False):
-        if left_part == right_part:
-            continue
-        left_numeric = isinstance(left_part, int)
-        right_numeric = isinstance(right_part, int)
-        if left_numeric and right_numeric:
-            return -1 if left_part < right_part else 1
-        if left_numeric != right_numeric:
-            # Numeric identifiers always sort below alphanumeric ones.
-            return -1 if left_numeric else 1
-        return -1 if str(left_part) < str(right_part) else 1
-    if len(left) == len(right):
-        return 0
-    return -1 if len(left) < len(right) else 1
 
 
 def compare_package_versions(left_version: str, right_version: str) -> int | None:
-    """`semver.compare` semantics; ``None`` when either side is not valid semver."""
-    left = _parse_semver(left_version)
-    right = _parse_semver(right_version)
+    """`semver.compare` semantics over PEP 440; ``None`` when either side is unparseable."""
+    left = _parse_version(left_version)
+    right = _parse_version(right_version)
     if left is None or right is None:
         return None
-    for index in range(3):
-        if left[index] != right[index]:
-            return -1 if left[index] < right[index] else 1
-    return _compare_prerelease(left[3], right[3])
+    if left == right:
+        return 0
+    return -1 if left < right else 1
 
 
 def is_newer_package_version(candidate_version: str, current_version: str) -> bool:
+    """Whether `candidate_version` is an upgrade from `current_version`.
+
+    An unparseable version is *not* treated as an upgrade. Upstream falls back
+    to "any difference means newer", which on PyPI would offer a release
+    candidate as an upgrade over the stable release it precedes.
+    """
     comparison = compare_package_versions(candidate_version, current_version)
-    if comparison is not None:
-        return comparison > 0
-    return candidate_version.strip() != current_version.strip()
+    return comparison is not None and comparison > 0
 
 
-def resolve_version_check_repo(repo: str | None = None, settings_manager: Any = None, env: Any = None) -> str:
+def resolve_version_check_package(package: str | None = None, settings_manager: Any = None, env: Any = None) -> str:
     env = os.environ if env is None else env
-    if repo and repo.strip():
-        return repo.strip()
-    from_env = env.get("PI_VERSION_CHECK_REPO")
+    if package and package.strip():
+        return package.strip()
+    from_env = env.get("PI_VERSION_CHECK_PACKAGE")
     if from_env and from_env.strip():
         return from_env.strip()
     if settings_manager is not None:
-        getter = getattr(settings_manager, "get_version_check_repo", None)
+        getter = getattr(settings_manager, "get_version_check_package", None)
         configured = getter() if getter is not None else None
         if configured and configured.strip():
             return configured.strip()
-    return DEFAULT_VERSION_CHECK_REPO
+    return DEFAULT_VERSION_CHECK_PACKAGE
 
 
 async def get_latest_pi_release(
     current_version: str,
     *,
-    repo: str | None = None,
+    package: str | None = None,
     settings_manager: Any = None,
     timeout_ms: int | None = None,
     retry: bool = False,
@@ -162,13 +141,12 @@ async def get_latest_pi_release(
     if env.get("PI_OFFLINE"):
         return None
 
-    resolved_repo = resolve_version_check_repo(repo, settings_manager, env)
+    resolved_package = resolve_version_check_package(package, settings_manager, env)
     response = await fetch_with_retry(
-        f"{GITHUB_API_BASE}/repos/{resolved_repo}/releases/latest",
+        f"{PYPI_API_BASE}/{resolved_package}/json",
         headers={
             "User-Agent": get_pi_user_agent(current_version),
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
+            "Accept": "application/json",
         },
         options=FetchRetryOptions(
             max_retries=2 if retry else 0,
@@ -186,18 +164,24 @@ async def get_latest_pi_release(
     if not isinstance(data, dict):
         return None
 
-    # GitHub releases carry the version in `tag_name` (usually `vX.Y.Z`).
-    raw_tag = data.get("tag_name") or data.get("name")
-    if not isinstance(raw_tag, str) or not raw_tag.strip():
+    info = data.get("info")
+    if not isinstance(info, dict):
         return None
-    version = raw_tag.strip()
-    if version.startswith("v"):
-        version = version[1:]
 
-    body = data.get("body")
-    note = body.strip() if isinstance(body, str) and body.strip() else None
-    url = data.get("html_url") if isinstance(data.get("html_url"), str) else None
-    return LatestPiRelease(version=version, package_name=resolved_repo, note=note, url=url)
+    # `info.version` is the latest *stable* release: PyPI excludes
+    # pre-releases here, unlike the `/simple/` listing.
+    raw_version = info.get("version")
+    if not isinstance(raw_version, str) or not raw_version.strip():
+        return None
+    version = raw_version.strip()
+
+    # A yanked release is one the maintainer withdrew; installers skip it, so
+    # offering it as an upgrade would send the user to a dead end.
+    if info.get("yanked") is True:
+        return None
+
+    url = f"https://pypi.org/project/{resolved_package}/{version}/"
+    return LatestPiRelease(version=version, package_name=resolved_package, note=None, url=url)
 
 
 async def get_latest_pi_version(current_version: str, **kwargs: Any) -> str | None:
@@ -220,7 +204,7 @@ async def check_for_new_pi_version(current_version: str, **kwargs: Any) -> Lates
 
 
 __all__ = [
-    "DEFAULT_VERSION_CHECK_REPO",
+    "DEFAULT_VERSION_CHECK_PACKAGE",
     "DEFAULT_VERSION_CHECK_TIMEOUT_MS",
     "LatestPiRelease",
     "check_for_new_pi_version",
@@ -230,5 +214,5 @@ __all__ = [
     "get_latest_pi_version",
     "get_pi_user_agent",
     "is_newer_package_version",
-    "resolve_version_check_repo",
+    "resolve_version_check_package",
 ]

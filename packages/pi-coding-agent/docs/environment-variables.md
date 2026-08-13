@@ -59,7 +59,7 @@ These variables are read by the Python port itself:
 | `PI_PACKAGE_DIR` | Override the package directory holding `README.md`, `docs/`, and `examples/`; used by self-documentation path resolution |
 | `PI_OFFLINE` | Disable startup network operations, package-manager network work, managed tool downloads, and version checks |
 | `PI_SKIP_VERSION_CHECK` | Disable the latest-release version request |
-| `PI_VERSION_CHECK_REPO` | GitHub `owner/name` repository used for version checks; Python-specific replacement for the TypeScript `pi.dev` version API |
+| `PI_VERSION_CHECK_PACKAGE` | PyPI distribution used for version checks; Python-specific replacement for the TypeScript `pi.dev` version API |
 | `PI_TELEMETRY` | Override telemetry and provider attribution behavior: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `PI_CACHE_RETENTION` | Set to `long` for extended provider prompt caching where supported |
 | `PI_SHARE_VIEWER_URL` | Override the base URL used by `/share` URL construction |

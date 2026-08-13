@@ -19,14 +19,14 @@ from pi_coding_agent.modes.interactive.interactive_mode import (
     create_interactive_tui,
 )
 from pi_coding_agent.utils.version_check import (
-    DEFAULT_VERSION_CHECK_REPO,
+    DEFAULT_VERSION_CHECK_PACKAGE,
     check_for_new_pi_version,
     compare_package_versions,
     format_version_check_error,
     get_latest_pi_release,
     get_pi_user_agent,
     is_newer_package_version,
-    resolve_version_check_repo,
+    resolve_version_check_package,
 )
 from pi_tui.tui_alt_screen import TuiAltScreen
 from pi_tui.tui_main_screen import TuiMainScreen
@@ -385,27 +385,32 @@ def test_compare_package_versions(left: str, right: str, expected: int | None):
     assert compare_package_versions(left, right) == expected
 
 
-def test_is_newer_falls_back_to_string_inequality():
-    assert is_newer_package_version("nightly-2", "nightly-1") is True
+def test_an_unparseable_version_is_not_an_upgrade():
+    """Upstream's "any difference means newer" cannot be used on PyPI.
+
+    PyPI serves PEP 440, so a fallback that treats every difference as an
+    upgrade offers `0.2.0rc1` over the stable `0.2.0` it precedes.
+    """
+    assert is_newer_package_version("nightly-2", "nightly-1") is False
     assert is_newer_package_version("nightly", "nightly") is False
 
 
-def test_resolve_repo_precedence(tmp_path: Path):
+def test_resolve_package_precedence(tmp_path: Path):
     class FakeSettings:
-        def get_version_check_repo(self) -> str:
-            return "from/settings"
+        def get_version_check_package(self) -> str:
+            return "from-settings"
 
-    assert resolve_version_check_repo(env={}) == DEFAULT_VERSION_CHECK_REPO
-    assert resolve_version_check_repo(settings_manager=FakeSettings(), env={}) == "from/settings"
+    assert resolve_version_check_package(env={}) == DEFAULT_VERSION_CHECK_PACKAGE
+    assert resolve_version_check_package(settings_manager=FakeSettings(), env={}) == "from-settings"
     assert (
-        resolve_version_check_repo(settings_manager=FakeSettings(), env={"PI_VERSION_CHECK_REPO": "from/env"})
-        == "from/env"
+        resolve_version_check_package(settings_manager=FakeSettings(), env={"PI_VERSION_CHECK_PACKAGE": "from-env"})
+        == "from-env"
     )
     assert (
-        resolve_version_check_repo(
-            "from/arg", settings_manager=FakeSettings(), env={"PI_VERSION_CHECK_REPO": "from/env"}
+        resolve_version_check_package(
+            "from-arg", settings_manager=FakeSettings(), env={"PI_VERSION_CHECK_PACKAGE": "from-env"}
         )
-        == "from/arg"
+        == "from-arg"
     )
 
 
@@ -421,39 +426,48 @@ def test_format_version_check_error_includes_errno():
     assert "111" in format_version_check_error(error)
 
 
-def _github_client(payload: Any, status_code: int = 200) -> httpx.AsyncClient:
+def _pypi_client(payload: Any, status_code: int = 200) -> httpx.AsyncClient:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert "api.github.com" in str(request.url)
+        assert "pypi.org/pypi/" in str(request.url)
         return httpx.Response(status_code, json=payload)
 
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
-def test_get_latest_release_reads_the_github_tag():
+def test_get_latest_release_reads_the_pypi_version():
     async def scenario() -> None:
-        async with _github_client({"tag_name": "v9.9.9", "body": "notes", "html_url": "https://example/rel"}) as client:
+        async with _pypi_client({"info": {"version": "9.9.9"}}) as client:
             release = await get_latest_pi_release("1.0.0", client=client, env={})
         assert release is not None
         assert release.version == "9.9.9"
-        assert release.note == "notes"
-        assert release.url == "https://example/rel"
+        assert release.url == "https://pypi.org/project/pp-coding-agent/9.9.9/"
 
     _run(scenario())
 
 
-def test_get_latest_release_uses_the_configured_repo():
+def test_a_yanked_release_is_not_offered():
+    """Installers skip a yanked release, so offering it is a dead end."""
+
+    async def scenario() -> None:
+        async with _pypi_client({"info": {"version": "9.9.9", "yanked": True}}) as client:
+            assert await get_latest_pi_release("1.0.0", client=client, env={}) is None
+
+    _run(scenario())
+
+
+def test_get_latest_release_uses_the_configured_package():
     seen: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(str(request.url))
-        return httpx.Response(200, json={"tag_name": "1.0.0"})
+        return httpx.Response(200, json={"info": {"version": "1.0.0"}})
 
     async def scenario() -> None:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            await get_latest_pi_release("1.0.0", client=client, env={"PI_VERSION_CHECK_REPO": "me/mine"})
+            await get_latest_pi_release("1.0.0", client=client, env={"PI_VERSION_CHECK_PACKAGE": "my-dist"})
 
     _run(scenario())
-    assert "repos/me/mine/releases/latest" in seen[0]
+    assert seen[0] == "https://pypi.org/pypi/my-dist/json"
 
 
 def test_offline_skips_the_version_check():
@@ -466,11 +480,11 @@ def test_offline_skips_the_version_check():
 
 def test_check_for_new_version_only_reports_newer():
     async def scenario() -> None:
-        async with _github_client({"tag_name": "v2.0.0"}) as client:
+        async with _pypi_client({"info": {"version": "2.0.0"}}) as client:
             newer = await check_for_new_pi_version("1.0.0", client=client, env={})
         assert newer is not None and newer.version == "2.0.0"
 
-        async with _github_client({"tag_name": "v0.9.0"}) as client:
+        async with _pypi_client({"info": {"version": "0.9.0"}}) as client:
             older = await check_for_new_pi_version("1.0.0", client=client, env={})
         assert older is None
 
@@ -497,15 +511,15 @@ def test_check_respects_skip_env():
 
 def test_non_ok_response_yields_no_release():
     async def scenario() -> None:
-        async with _github_client({}, status_code=404) as client:
+        async with _pypi_client({}, status_code=404) as client:
             assert await get_latest_pi_release("1.0.0", client=client, env={}) is None
 
     _run(scenario())
 
 
-def test_missing_tag_yields_no_release():
+def test_missing_version_yields_no_release():
     async def scenario() -> None:
-        async with _github_client({"body": "no tag here"}) as client:
+        async with _pypi_client({"info": {}}) as client:
             assert await get_latest_pi_release("1.0.0", client=client, env={}) is None
 
     _run(scenario())

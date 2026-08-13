@@ -81,7 +81,7 @@ For VS Code, include `--wait` so pi resumes after the editor exits:
 
 Pi has two separate startup features:
 
-- **Update check:** checks GitHub Releases, not `pi.dev`. Configure the repository with `PI_VERSION_CHECK_REPO` or `versionCheckRepo`. Disable with `PI_SKIP_VERSION_CHECK=1`.
+- **Update check:** checks PyPI, not `pi.dev`. Configure the distribution with `PI_VERSION_CHECK_PACKAGE` or `versionCheckPackage`. Disable with `PI_SKIP_VERSION_CHECK=1`.
 - **Install/update telemetry:** controlled by `enableInstallTelemetry` or `PI_TELEMETRY`. This also controls optional provider attribution headers for OpenRouter, Cloudflare, and direct NVIDIA requests.
 
 Use `--offline` or `PI_OFFLINE=1` to disable startup network operations, including update checks, package update checks, managed tool downloads, and install/update telemetry.
@@ -90,7 +90,7 @@ Use `--offline` or `PI_OFFLINE=1` to disable startup network operations, includi
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `versionCheckRepo` | string | `"earendil-works/pi"` | GitHub `owner/name` repository used for version checks |
+| `versionCheckPackage` | string | `"pp-coding-agent"` | PyPI distribution used for version checks |
 | `httpIdleTimeoutMs` | number/string | `300000` | HTTP header/body idle timeout in milliseconds. Set to `0` or `"disabled"` to disable |
 | `websocketConnectTimeoutMs` | number/string | provider default | WebSocket connect/open handshake timeout in milliseconds for providers that support WebSocket transports. Set to `0` to disable |
 

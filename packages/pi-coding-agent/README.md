@@ -332,7 +332,7 @@ Use `/settings` to modify common options, or edit JSON files directly:
 Important settings keys include `defaultProvider`, `defaultModel`,
 `defaultThinkingLevel`, `steeringMode`, `followUpMode`, `transport`,
 `externalEditor`, `defaultProjectTrust`, `enableInstallTelemetry`,
-`versionCheckRepo`, `tuiMode`, `fullscreenExitOutput`, `fullscreenScrollbar`,
+`versionCheckPackage`, `tuiMode`, `fullscreenExitOutput`, `fullscreenScrollbar`,
 `enabledModels`, `images.autoResize`, and `images.blockImages`.
 
 The `markdown.mermaid` setting exists, but Mermaid diagram rendering is not
@@ -361,8 +361,8 @@ project resources to load.
 
 Pi has two separate startup features:
 
-- **Update check:** checks GitHub Releases, not `pi.dev`. Configure the repo
-  with `PI_VERSION_CHECK_REPO` or `versionCheckRepo`. Disable with
+- **Update check:** checks PyPI, not `pi.dev`. Configure the distribution
+  with `PI_VERSION_CHECK_PACKAGE` or `versionCheckPackage`. Disable with
   `PI_SKIP_VERSION_CHECK=1`.
 - **Install/update telemetry:** controlled by `enableInstallTelemetry` or
   `PI_TELEMETRY`. This also controls optional provider attribution headers for
@@ -749,7 +749,7 @@ pp --thinking high "Solve this complex problem"
 | `PI_PACKAGE_DIR` | Override package directory for README/docs/examples resolution |
 | `PI_OFFLINE` | Disable startup network operations |
 | `PI_SKIP_VERSION_CHECK` | Skip GitHub release update check |
-| `PI_VERSION_CHECK_REPO` | GitHub `owner/name` used for update checks |
+| `PI_VERSION_CHECK_PACKAGE` | PyPI distribution used for update checks |
 | `PI_TELEMETRY` | Override install/update telemetry and provider attribution headers |
 | `PI_SHARE_VIEWER_URL` | Override share viewer URL prefix |
 | `PI_CLEAR_ON_SHRINK` | Clear terminal when it shrinks if terminal setting is unset |
