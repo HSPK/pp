@@ -1,44 +1,37 @@
-"""Tests for `pi_agent.harness.session.search`.
+"""Python port of `packages/agent/test/harness/session/search.test.ts`.
 
-Ported behaviour from `packages/agent/src/harness/session/search.ts`, which has
-no dedicated TypeScript suite; the assertions below follow that source line by
-line: an empty/whitespace query short-circuits, the `cwd` option filters on the
-metadata's `cwd` field, and every entry whose JSON serialization contains the
-lower-cased query becomes a hit carrying the serialization as the snippet.
-
-One deliberate port difference is asserted here: TypeScript snippets are
-`JSON.stringify(entry)` of the in-memory entry, which already is the wire shape.
-This port's entries are snake_case dataclasses, so `search.py` serializes
-`entry_to_wire(entry)` instead, which produces the same camelCase wire JSON.
+The four upstream cases come first; the rest pin behaviour the TypeScript
+suite leaves to its source (empty/whitespace queries, `limit`, paging, a
+repeated session id), which this port had covered before upstream grew a
+dedicated suite.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
+from typing import Any
 
 import pytest
 from pi_agent.harness.session import InMemorySessionRepo, JsonlSessionCreateOptions, JsonlSessionRepo
+from pi_agent.harness.session.jsonl.repo import list_jsonl_session_metadata, load_jsonl_session_storage
 from pi_agent.harness.session.jsonl.types import JsonlSessionRepoOptions
-from pi_agent.harness.session.search import (
-    ScanningSessionSearch,
+from pi_agent.harness.session.types import SessionCreateOptions
+from pi_agent.search import (
+    ScanningReadableOptions,
+    ScanningSessionSearchOptions,
     SessionSearchOptions,
     create_scanning_session_search,
+    scanning_entries,
 )
-from pi_agent.harness.session.types import SessionCreateOptions, SessionMetadata
-from session_conformance_helpers import create_assistant_message, create_user_message
-
-TIMEOUT = 5.0
+from pi_ai.utils.abort import AbortController, AbortError
+from session_conformance_helpers import create_user_message
 
 
-class _ExplodingSource:
-    """Source that fails if it is touched: proves the empty-query short circuit."""
-
-    async def list(self):
-        raise AssertionError("list() must not be called for an empty query")
-
-    async def open(self, metadata):
-        raise AssertionError("open() must not be called for an empty query")
+async def _collect(iterable: Any) -> list[Any]:
+    items: list[Any] = []
+    async for item in iterable:
+        items.append(item)
+    return items
 
 
 @pytest.fixture
@@ -46,139 +39,168 @@ def repo() -> InMemorySessionRepo:
     return InMemorySessionRepo()
 
 
-async def _seed(repo: InMemorySessionRepo, session_id: str, texts: list[str]) -> list[str]:
+async def _session(repo: InMemorySessionRepo, session_id: str, texts: list[str]):
+    # The new API has no `cwd` filter, so the in-memory cases need no cwd; the
+    # JSONL case below still sets one, because its repo lists by cwd.
     session = await repo.create(SessionCreateOptions(id=session_id))
-    return [await session.append_message(create_user_message(text)) for text in texts]
+    entry_ids = [await session.append_message(create_user_message(text)) for text in texts]
+    return session, entry_ids
 
 
-async def test_returns_no_hits_for_an_empty_query():
-    search = ScanningSessionSearch(_ExplodingSource())
-
-    assert await asyncio.wait_for(search.search(SessionSearchOptions(text="")), timeout=TIMEOUT) == []
-
-
-async def test_returns_no_hits_for_a_whitespace_only_query():
-    search = ScanningSessionSearch(_ExplodingSource())
-
-    assert await asyncio.wait_for(search.search(SessionSearchOptions(text="   \t\n")), timeout=TIMEOUT) == []
+# --------------------------------------------------------------------------
+# Ported from search.test.ts
+# --------------------------------------------------------------------------
 
 
-async def test_finds_matching_entries_across_sessions_in_oldest_first_order(repo: InMemorySessionRepo):
-    first_ids = await _seed(repo, "session-a", ["needle in the haystack", "unrelated"])
-    second_ids = await _seed(repo, "session-b", ["also a needle here"])
-    search = ScanningSessionSearch(repo)
+async def test_scans_an_arbitrary_in_memory_projected_source(repo: InMemorySessionRepo):
+    root, _ = await _session(repo, "root", ["fix auth flow"])
+    other, _ = await _session(repo, "other", ["auth in another workspace"])
+    search = create_scanning_session_search([root, other])
 
-    hits = await asyncio.wait_for(search.search(SessionSearchOptions(text="needle")), timeout=TIMEOUT)
-
-    assert [hit.entry_id for hit in hits] == [first_ids[0], second_ids[0]]
-    assert [hit.metadata.id for hit in hits] == ["session-a", "session-b"]
-
-
-async def test_matches_case_insensitively_and_trims_the_query(repo: InMemorySessionRepo):
-    ids = await _seed(repo, "session", ["The Quick Brown Fox"])
-    search = ScanningSessionSearch(repo)
-
-    hits = await asyncio.wait_for(search.search(SessionSearchOptions(text="  QUICK bROWN  ")), timeout=TIMEOUT)
-
-    assert [hit.entry_id for hit in hits] == ids
+    hits = await _collect(search.search("auth"))
+    assert [hit.session_id for hit in hits] == ["root", "other"]
+    assert await _collect(search.search("missing")) == []
 
 
-async def test_returns_no_hits_when_nothing_matches(repo: InMemorySessionRepo):
-    await _seed(repo, "session", ["hello world"])
-    search = ScanningSessionSearch(repo)
+async def test_includes_labels_in_memory_scanning_projections(repo: InMemorySessionRepo):
+    session, entry_ids = await _session(repo, "session", ["plain body"])
+    await session.set_label(entry_ids[0], "important label")
+    search = create_scanning_session_search([session])
 
-    assert await asyncio.wait_for(search.search(SessionSearchOptions(text="goodbye")), timeout=TIMEOUT) == []
-
-
-async def test_snippet_is_the_wire_json_of_the_entry(repo: InMemorySessionRepo):
-    await _seed(repo, "session", ["snippet payload"])
-    search = ScanningSessionSearch(repo)
-
-    hit = (await asyncio.wait_for(search.search(SessionSearchOptions(text="snippet")), timeout=TIMEOUT))[0]
-
-    payload = json.loads(hit.snippet)
-    assert payload["type"] == "message"
-    assert payload["message"]["role"] == "user"
-    assert payload["message"]["content"][0]["text"] == "snippet payload"
-    # Wire keys stay camelCase, so a query can match them the way it would
-    # against a session written by the TypeScript CLI.
-    assert "parentId" in payload
-    assert hit.score is None
+    hits = await _collect(search.search("important"))
+    assert [(hit.session_id, hit.entry_id) for hit in hits] == [("session", entry_ids[0])]
 
 
-async def test_matches_against_wire_field_names_and_non_message_entries(repo: InMemorySessionRepo):
-    session = await repo.create(SessionCreateOptions(id="session"))
-    custom_id = await session.append_custom_entry("note", {"remember": "this"})
-    search = ScanningSessionSearch(repo)
+async def test_honors_entry_type_filters_and_abort_signals(repo: InMemorySessionRepo):
+    session, entry_ids = await _session(repo, "session", ["auth message"])
+    await session.append_custom_entry("note", {"text": "auth custom"})
+    search = create_scanning_session_search([session])
 
-    by_value = await asyncio.wait_for(search.search(SessionSearchOptions(text="remember")), timeout=TIMEOUT)
-    by_wire_key = await asyncio.wait_for(search.search(SessionSearchOptions(text="customType")), timeout=TIMEOUT)
+    hits = await _collect(search.search("auth", SessionSearchOptions(entry_types=["message"])))
+    assert [(hit.session_id, hit.entry_id) for hit in hits] == [("session", entry_ids[0])]
 
-    assert [hit.entry_id for hit in by_value] == [custom_id]
-    assert [hit.entry_id for hit in by_wire_key] == [custom_id]
-
-
-async def test_reports_entry_timestamps_as_utc_iso_strings_with_milliseconds(repo: InMemorySessionRepo):
-    await _seed(repo, "session", ["timestamped"])
-    search = ScanningSessionSearch(repo)
-
-    hit = (await asyncio.wait_for(search.search(SessionSearchOptions(text="timestamped")), timeout=TIMEOUT))[0]
-
-    entry = await (await repo.open(SessionMetadata(id="session", created_at=0))).get_entry(hit.entry_id)
-    assert hit.timestamp.endswith("Z")
-    # `new Date(ms).toISOString()`: millisecond precision, no offset suffix.
-    assert len(hit.timestamp) == len("1970-01-01T00:00:00.000Z")
-    assert hit.timestamp.startswith("20")
-    assert entry.timestamp > 0
+    controller = AbortController()
+    controller.abort()
+    with pytest.raises(AbortError):
+        await _collect(search.search("auth", SessionSearchOptions(signal=controller.signal)))
 
 
-async def test_matches_multiple_entries_within_one_session(repo: InMemorySessionRepo):
-    session = await repo.create(SessionCreateOptions(id="session"))
-    first = await session.append_message(create_user_message("match one"))
-    await session.append_message(create_assistant_message("nothing here"))
-    second = await session.append_message(create_user_message("match two"))
-    search = ScanningSessionSearch(repo)
+async def test_scans_jsonl_sessions_from_disk(tmp_path):
+    options = JsonlSessionRepoOptions(sessions_root=str(tmp_path))
+    repository = JsonlSessionRepo(options)
+    cwd = str(tmp_path / "workspace")
+    other_cwd = str(tmp_path / "other")
 
-    hits = await asyncio.wait_for(search.search(SessionSearchOptions(text="match")), timeout=TIMEOUT)
+    session = await repository.create(JsonlSessionCreateOptions(id="jsonl", cwd=cwd))
+    entry_id = await session.append_message(create_user_message("jsonl backed auth entry"))
+    await session.set_label(entry_id, "disk label")
+    other = await repository.create(JsonlSessionCreateOptions(id="other", cwd=other_cwd))
+    other_entry_id = await other.append_message(create_user_message("jsonl backed auth entry in another cwd"))
 
-    assert [hit.entry_id for hit in hits] == [first, second]
+    async def jsonl_readables(query: Any = None):
+        for metadata in await list_jsonl_session_metadata(options, query):
+            yield await load_jsonl_session_storage(options, metadata)
+
+    search = create_scanning_session_search(jsonl_readables)
+
+    auth_hits = await _collect(search.search("auth"))
+    assert len(auth_hits) == 2
+    assert {(hit.session_id, hit.entry_id) for hit in auth_hits} == {
+        ("jsonl", entry_id),
+        ("other", other_entry_id),
+    }
+
+    disk_hits = await _collect(search.search("disk"))
+    assert [(hit.session_id, hit.entry_id) for hit in disk_hits] == [("jsonl", entry_id)]
 
 
-async def test_skips_sessions_whose_metadata_has_no_cwd_when_a_cwd_filter_is_given(repo: InMemorySessionRepo):
-    # `InMemorySessionRepo` metadata has no `cwd` at all, so TS's
-    # `(metadata as { cwd?: unknown }).cwd` is undefined and never equals the
-    # requested cwd; the Python `getattr(metadata, "cwd", None)` matches that.
-    await _seed(repo, "session", ["needle"])
-    search = ScanningSessionSearch(repo)
-
-    hits = await asyncio.wait_for(search.search(SessionSearchOptions(text="needle", cwd="/workspace")), timeout=TIMEOUT)
-
-    assert hits == []
+# --------------------------------------------------------------------------
+# Behaviour the TypeScript suite leaves to its source
+# --------------------------------------------------------------------------
 
 
-async def test_filters_by_cwd_against_a_jsonl_repo(tmp_path):
-    repo = JsonlSessionRepo(JsonlSessionRepoOptions(sessions_root=tmp_path))
-    inside = await repo.create(JsonlSessionCreateOptions(id="inside", cwd=str(tmp_path / "project")))
-    inside_id = await inside.append_message(create_user_message("needle inside"))
-    outside = await repo.create(JsonlSessionCreateOptions(id="outside", cwd=str(tmp_path / "other")))
-    await outside.append_message(create_user_message("needle outside"))
-    search = create_scanning_session_search(repo)
+class _ExplodingReadable:
+    """Fails if touched, proving a query short-circuits before any read."""
 
-    filtered = await asyncio.wait_for(
-        search.search(SessionSearchOptions(text="needle", cwd=str(tmp_path / "project"))), timeout=TIMEOUT
+    async def get_metadata(self):
+        raise AssertionError("get_metadata() must not be called")
+
+    async def find_entries(self, query=None):
+        raise AssertionError("find_entries() must not be called")
+
+    async def get_label(self, id: str):
+        raise AssertionError("get_label() must not be called")
+
+
+@pytest.mark.parametrize(
+    "text,options",
+    [
+        ("", None),
+        ("   ", None),
+        ("auth", SessionSearchOptions(limit=0)),
+        ("auth", SessionSearchOptions(entry_types=[])),
+    ],
+)
+async def test_a_query_that_can_match_nothing_reads_nothing(text: str, options):
+    search = create_scanning_session_search([_ExplodingReadable()])
+
+    assert await _collect(search.search(text, options)) == []
+
+
+async def test_limit_stops_the_scan(repo: InMemorySessionRepo):
+    session, entry_ids = await _session(repo, "s", ["auth one", "auth two", "auth three"])
+    search = create_scanning_session_search([session])
+
+    hits = await _collect(search.search("auth", SessionSearchOptions(limit=2)))
+    assert [hit.entry_id for hit in hits] == entry_ids[:2]
+
+
+async def test_the_default_hit_carries_the_timestamp_and_snippet(repo: InMemorySessionRepo):
+    session, entry_ids = await _session(repo, "s", ["auth body"])
+    search = create_scanning_session_search([session])
+
+    hit = (await _collect(search.search("auth")))[0]
+    assert hit.entry_id == entry_ids[0]
+    assert isinstance(hit.timestamp, int)
+    # The snippet is the wire JSON, which is what the match ran against.
+    assert "auth body" in hit.snippet
+    assert json.loads(hit.snippet)["type"] == "message"
+
+
+async def test_a_repeated_session_id_is_an_error(repo: InMemorySessionRepo):
+    """Scanning one session twice would double every hit it produces."""
+    session, _ = await _session(repo, "dup", ["auth"])
+    search = create_scanning_session_search([session, session])
+
+    with pytest.raises(ValueError, match="Duplicate sessionId: dup"):
+        await _collect(search.search("auth"))
+
+
+async def test_paging_reads_every_entry(repo: InMemorySessionRepo):
+    """`page_size` is an internal detail: the result must not depend on it."""
+    session, entry_ids = await _session(repo, "s", [f"auth {index}" for index in range(7)])
+    search = create_scanning_session_search([session], ScanningSessionSearchOptions(page_size=2))
+
+    hits = await _collect(search.search("auth"))
+    assert [hit.entry_id for hit in hits] == entry_ids
+
+
+async def test_a_custom_projector_replaces_the_matched_text(repo: InMemorySessionRepo):
+    session, entry_ids = await _session(repo, "s", ["body text"])
+    search = create_scanning_session_search(
+        [session],
+        ScanningSessionSearchOptions(project_text=lambda metadata, entry, label: f"projected {metadata.id}"),
     )
-    unfiltered = await asyncio.wait_for(search.search(SessionSearchOptions(text="needle")), timeout=TIMEOUT)
 
-    assert [hit.entry_id for hit in filtered] == [inside_id]
-    assert filtered[0].metadata.cwd == str(tmp_path / "project")
-    assert len(unfiltered) == 2
+    # The entry body is no longer searchable; the projection is.
+    assert await _collect(search.search("body")) == []
+    hits = await _collect(search.search("projected"))
+    assert [hit.entry_id for hit in hits] == entry_ids
 
 
-async def test_create_scanning_session_search_returns_a_working_search(repo: InMemorySessionRepo):
-    ids = await _seed(repo, "session", ["factory built"])
+async def test_scanning_entries_yields_candidates_for_one_session(repo: InMemorySessionRepo):
+    session, entry_ids = await _session(repo, "s", ["first", "second"])
 
-    search = create_scanning_session_search(repo)
-    hits = await asyncio.wait_for(search.search(SessionSearchOptions(text="factory")), timeout=TIMEOUT)
-
-    assert isinstance(search, ScanningSessionSearch)
-    assert [hit.entry_id for hit in hits] == ids
+    candidates = await _collect(scanning_entries(session, ScanningReadableOptions()))
+    assert [candidate.entry_id for candidate in candidates] == entry_ids
+    assert all(candidate.type == "message" for candidate in candidates)
