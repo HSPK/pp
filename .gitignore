@@ -13,3 +13,4 @@ build/
 .full_test_output.txt
 .port-check.log
 .eval/
+.env

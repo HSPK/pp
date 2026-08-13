@@ -1,19 +1,44 @@
 [project]
-name = "pi-ai"
-version = "0.0.1"
-description = "Unified LLM provider layer (Python port of @earendil-works/pi-ai)"
+name = "pp-ai"
+version = "0.1.0"
+description = "Unified LLM API with automatic model discovery and provider configuration (Python port of @earendil-works/pi-ai)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
+authors = [{ name = "Mario Zechner" }]
+maintainers = [{ name = "Hangxing Wei", email = "HSPK@users.noreply.github.com" }]
+keywords = ["ai", "llm", "openai", "anthropic", "gemini", "unified", "api", "pi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
-    "pi-telemetry",
+    "pp-telemetry==0.1.0",
     "httpx>=0.27",
     "jsonschema>=4.23",
 ]
+
+[project.urls]
+Homepage = "https://github.com/HSPK/pp"
+Repository = "https://github.com/HSPK/pp"
+Issues = "https://github.com/HSPK/pp/issues"
+Upstream = "https://github.com/earendil-works/pi/tree/main/packages/ai"
 
 [project.scripts]
 pp-ai = "pi_ai.cli:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -36,4 +61,4 @@ artifacts = [
 ]
 
 [tool.uv.sources]
-pi-telemetry = { workspace = true }
+pp-telemetry = { workspace = true }

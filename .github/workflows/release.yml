@@ -1,0 +1,184 @@
+# Publishes all nine distributions to PyPI on a `v*` tag.
+#
+# Publishing uses Trusted Publishing (OIDC), so no long-lived API token is
+# stored in this repository. Each of the nine PyPI projects needs a trusted
+# publisher configured once, all of them pointing at this same workflow file.
+#
+# Everything is published from a single job, in dependency order, rather than
+# from one job per package. Two constraints force that shape:
+#
+#   * PyPI cannot use a *reusable* workflow as a trusted publisher -- it
+#     matches on the workflow filename and rejects the reusable case with
+#     `invalid-publisher` (pypi/warehouse#11096). So the upload steps have to
+#     live in this file.
+#   * The packages pin each other with `==`, so a dependency must exist on
+#     PyPI before the package requiring it; anyone installing in between would
+#     otherwise hit an unsatisfiable pin. Sequential steps in one job give that
+#     ordering for free.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: Index to publish to
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+
+env:
+  UV_VERSION: "0.12.1"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --all-packages
+      - name: Verify the tag matches the declared version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          declared=$(uv run python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('packages/pi-coding-agent/pyproject.toml').read_text())['project']['version'])")
+          if [ "$tag" != "$declared" ]; then
+            echo "tag $tag does not match declared version $declared" >&2
+            exit 1
+          fi
+      - run: uv run python scripts/set_version.py --check
+      - run: uv run python scripts/check_dependencies.py
+      - run: uv run ruff check packages/
+      - run: uv run ruff format --check packages/
+      - run: uv run pytest packages/
+
+  build:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv build --all-packages --out-dir dist
+      - name: Check the built metadata
+        run: uvx twine check dist/*
+      - name: Install from the built distributions alone
+        # A workspace install hides a missing `Requires-Dist` entry, because
+        # every package is already importable. Installing the way a user does
+        # is the check that catches it.
+        #
+        # The index stays enabled so third-party requirements (jsonschema,
+        # httpx, ...) resolve; the nine internal packages must still come from
+        # `dist/`, because the version being released is by definition not on
+        # PyPI yet and the `==` pin admits nothing else.
+        run: |
+          version=$(python3 -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('packages/pi-coding-agent/pyproject.toml').read_text())['project']['version'])")
+          uv venv --python 3.11 /tmp/isolated
+          VIRTUAL_ENV=/tmp/isolated uv pip install --find-links dist \
+            "pp-coding-agent==${version}" "pp-evals==${version}"
+          /tmp/isolated/bin/pp --version
+          /tmp/isolated/bin/pp-ai --help
+      - name: Split dist into one directory per package
+        # `gh-action-pypi-publish` uploads a whole directory, so each package
+        # needs its own. Publishing all of `dist/` from every step would defeat
+        # the ordering below.
+        run: |
+          for path in dist/*; do
+            file=$(basename "$path")
+            # pp_coding_agent-0.1.0-py3-none-any.whl -> pp_coding_agent
+            name=${file%%-*}
+            mkdir -p "staged/$name"
+            cp "$path" "staged/$name/"
+          done
+          find staged -type f | sort
+      - uses: actions/upload-artifact@v4
+        with:
+          name: staged
+          path: staged/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.repository || 'pypi' }}
+    permissions:
+      # Required for Trusted Publishing.
+      id-token: write
+    env:
+      # Empty means the action's default, which is PyPI.
+      INDEX_URL: ${{ (inputs.repository == 'testpypi') && 'https://test.pypi.org/legacy/' || '' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: staged
+          path: staged
+
+      # The order below is the dependency graph, leaves first. Each step waits
+      # for the previous upload to land. `skip-existing` lets a re-run after a
+      # partial failure continue instead of aborting on what already uploaded.
+      - name: Publish pp-telemetry
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: staged/pp_telemetry
+          repository-url: ${{ env.INDEX_URL }}
+          skip-existing: true
+
+      - name: Publish pp-rpc-protocol
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: staged/pp_rpc_protocol
+          repository-url: ${{ env.INDEX_URL }}
+          skip-existing: true
+
+      - name: Publish pp-tui
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: staged/pp_tui
+          repository-url: ${{ env.INDEX_URL }}
+          skip-existing: true
+
+      - name: Publish pp-ai
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: staged/pp_ai
+          repository-url: ${{ env.INDEX_URL }}
+          skip-existing: true
+
+      - name: Publish pp-agent-core
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: staged/pp_agent_core
+          repository-url: ${{ env.INDEX_URL }}
+          skip-existing: true
+
+      - name: Publish pp-rpc-client
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: staged/pp_rpc_client
+          repository-url: ${{ env.INDEX_URL }}
+          skip-existing: true
+
+      - name: Publish pp-rpc-server
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: staged/pp_rpc_server
+          repository-url: ${{ env.INDEX_URL }}
+          skip-existing: true
+
+      - name: Publish pp-coding-agent
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: staged/pp_coding_agent
+          repository-url: ${{ env.INDEX_URL }}
+          skip-existing: true
+
+      - name: Publish pp-evals
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: staged/pp_evals
+          repository-url: ${{ env.INDEX_URL }}
+          skip-existing: true

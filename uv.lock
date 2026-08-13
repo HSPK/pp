@@ -8,16 +8,16 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "pi-agent",
-    "pi-ai",
-    "pi-client",
-    "pi-coding-agent",
-    "pi-evals",
-    "pi-protocol",
-    "pi-server",
-    "pi-telemetry",
-    "pi-tui",
-    "pypi-monorepo",
+    "pp-agent-core",
+    "pp-ai",
+    "pp-coding-agent",
+    "pp-evals",
+    "pp-monorepo",
+    "pp-rpc-client",
+    "pp-rpc-protocol",
+    "pp-rpc-server",
+    "pp-telemetry",
+    "pp-tui",
 ]
 
 [[package]]
@@ -530,149 +530,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pi-agent"
-version = "0.0.1"
-source = { editable = "packages/pi-agent" }
-dependencies = [
-    { name = "pi-ai" },
-    { name = "pi-telemetry" },
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pi-ai", editable = "packages/pi-ai" },
-    { name = "pi-telemetry", editable = "packages/pi-telemetry" },
-    { name = "pyyaml", specifier = ">=6.0" },
-]
-
-[[package]]
-name = "pi-ai"
-version = "0.0.1"
-source = { editable = "packages/pi-ai" }
-dependencies = [
-    { name = "httpx" },
-    { name = "jsonschema" },
-    { name = "pi-telemetry" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "jsonschema", specifier = ">=4.23" },
-    { name = "pi-telemetry", editable = "packages/pi-telemetry" },
-]
-
-[[package]]
-name = "pi-client"
-version = "0.0.1"
-source = { editable = "packages/pi-client" }
-dependencies = [
-    { name = "pi-protocol" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "pi-protocol", editable = "packages/pi-protocol" }]
-
-[[package]]
-name = "pi-coding-agent"
-version = "0.0.1"
-source = { editable = "packages/pi-coding-agent" }
-dependencies = [
-    { name = "jsonschema" },
-    { name = "pi-agent" },
-    { name = "pi-ai" },
-    { name = "pi-protocol" },
-    { name = "pi-telemetry" },
-    { name = "pi-tui" },
-    { name = "pillow" },
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "jsonschema", specifier = ">=4.23" },
-    { name = "pi-agent", editable = "packages/pi-agent" },
-    { name = "pi-ai", editable = "packages/pi-ai" },
-    { name = "pi-protocol", editable = "packages/pi-protocol" },
-    { name = "pi-telemetry", editable = "packages/pi-telemetry" },
-    { name = "pi-tui", editable = "packages/pi-tui" },
-    { name = "pillow", specifier = ">=11.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-]
-
-[[package]]
-name = "pi-evals"
-version = "0.0.1"
-source = { editable = "packages/pi-evals" }
-dependencies = [
-    { name = "pi-agent" },
-    { name = "pi-ai" },
-    { name = "pi-coding-agent" },
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pi-agent", editable = "packages/pi-agent" },
-    { name = "pi-ai", editable = "packages/pi-ai" },
-    { name = "pi-coding-agent", editable = "packages/pi-coding-agent" },
-    { name = "pytest", specifier = ">=8.3" },
-]
-
-[[package]]
-name = "pi-protocol"
-version = "0.0.1"
-source = { editable = "packages/pi-protocol" }
-dependencies = [
-    { name = "jsonschema" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "jsonschema", specifier = ">=4.23" }]
-
-[[package]]
-name = "pi-server"
-version = "0.0.1"
-source = { editable = "packages/pi-server" }
-dependencies = [
-    { name = "pi-agent" },
-    { name = "pi-ai" },
-    { name = "pi-protocol" },
-]
-
-[package.dev-dependencies]
-test = [
-    { name = "pi-client" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pi-agent", editable = "packages/pi-agent" },
-    { name = "pi-ai", editable = "packages/pi-ai" },
-    { name = "pi-protocol", editable = "packages/pi-protocol" },
-]
-
-[package.metadata.requires-dev]
-test = [{ name = "pi-client", editable = "packages/pi-client" }]
-
-[[package]]
-name = "pi-telemetry"
-version = "0.0.1"
-source = { editable = "packages/pi-telemetry" }
-
-[[package]]
-name = "pi-tui"
-version = "0.0.1"
-source = { editable = "packages/pi-tui" }
-dependencies = [
-    { name = "wcwidth" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "wcwidth", specifier = ">=0.2" }]
-
-[[package]]
 name = "pillow"
 version = "12.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -767,28 +624,103 @@ wheels = [
 ]
 
 [[package]]
-name = "pygments"
-version = "2.20.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c3/b2/bc9c9196916376152d655522fdcebac55e66de6603a76a02bca1b6414f6c/pygments-2.20.0.tar.gz", hash = "sha256:6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f", size = 4955991, upload-time = "2026-03-29T13:29:33.898Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl", hash = "sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176", size = 1231151, upload-time = "2026-03-29T13:29:30.038Z" },
+name = "pp-agent-core"
+version = "0.1.0"
+source = { editable = "packages/pi-agent" }
+dependencies = [
+    { name = "pp-ai" },
+    { name = "pp-telemetry" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pp-ai", editable = "packages/pi-ai" },
+    { name = "pp-telemetry", editable = "packages/pi-telemetry" },
+    { name = "pyyaml", specifier = ">=6.0" },
 ]
 
 [[package]]
-name = "pypi-monorepo"
-version = "0.0.1"
+name = "pp-ai"
+version = "0.1.0"
+source = { editable = "packages/pi-ai" }
+dependencies = [
+    { name = "httpx" },
+    { name = "jsonschema" },
+    { name = "pp-telemetry" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "jsonschema", specifier = ">=4.23" },
+    { name = "pp-telemetry", editable = "packages/pi-telemetry" },
+]
+
+[[package]]
+name = "pp-coding-agent"
+version = "0.1.0"
+source = { editable = "packages/pi-coding-agent" }
+dependencies = [
+    { name = "jsonschema" },
+    { name = "pillow" },
+    { name = "pp-agent-core" },
+    { name = "pp-ai" },
+    { name = "pp-rpc-client" },
+    { name = "pp-rpc-protocol" },
+    { name = "pp-rpc-server" },
+    { name = "pp-telemetry" },
+    { name = "pp-tui" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jsonschema", specifier = ">=4.23" },
+    { name = "pillow", specifier = ">=11.0" },
+    { name = "pp-agent-core", editable = "packages/pi-agent" },
+    { name = "pp-ai", editable = "packages/pi-ai" },
+    { name = "pp-rpc-client", editable = "packages/pi-client" },
+    { name = "pp-rpc-protocol", editable = "packages/pi-protocol" },
+    { name = "pp-rpc-server", editable = "packages/pi-server" },
+    { name = "pp-telemetry", editable = "packages/pi-telemetry" },
+    { name = "pp-tui", editable = "packages/pi-tui" },
+    { name = "pyyaml", specifier = ">=6.0" },
+]
+
+[[package]]
+name = "pp-evals"
+version = "0.1.0"
+source = { editable = "packages/pi-evals" }
+dependencies = [
+    { name = "pp-agent-core" },
+    { name = "pp-ai" },
+    { name = "pp-coding-agent" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pp-agent-core", editable = "packages/pi-agent" },
+    { name = "pp-ai", editable = "packages/pi-ai" },
+    { name = "pp-coding-agent", editable = "packages/pi-coding-agent" },
+    { name = "pytest", specifier = ">=8.3" },
+]
+
+[[package]]
+name = "pp-monorepo"
+version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "pi-agent" },
-    { name = "pi-ai" },
-    { name = "pi-client" },
-    { name = "pi-coding-agent" },
-    { name = "pi-evals" },
-    { name = "pi-protocol" },
-    { name = "pi-server" },
-    { name = "pi-telemetry" },
-    { name = "pi-tui" },
+    { name = "pp-agent-core" },
+    { name = "pp-ai" },
+    { name = "pp-coding-agent" },
+    { name = "pp-evals" },
+    { name = "pp-rpc-client" },
+    { name = "pp-rpc-protocol" },
+    { name = "pp-rpc-server" },
+    { name = "pp-telemetry" },
+    { name = "pp-tui" },
 ]
 
 [package.dev-dependencies]
@@ -803,15 +735,15 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pi-agent", editable = "packages/pi-agent" },
-    { name = "pi-ai", editable = "packages/pi-ai" },
-    { name = "pi-client", editable = "packages/pi-client" },
-    { name = "pi-coding-agent", editable = "packages/pi-coding-agent" },
-    { name = "pi-evals", editable = "packages/pi-evals" },
-    { name = "pi-protocol", editable = "packages/pi-protocol" },
-    { name = "pi-server", editable = "packages/pi-server" },
-    { name = "pi-telemetry", editable = "packages/pi-telemetry" },
-    { name = "pi-tui", editable = "packages/pi-tui" },
+    { name = "pp-agent-core", editable = "packages/pi-agent" },
+    { name = "pp-ai", editable = "packages/pi-ai" },
+    { name = "pp-coding-agent", editable = "packages/pi-coding-agent" },
+    { name = "pp-evals", editable = "packages/pi-evals" },
+    { name = "pp-rpc-client", editable = "packages/pi-client" },
+    { name = "pp-rpc-protocol", editable = "packages/pi-protocol" },
+    { name = "pp-rpc-server", editable = "packages/pi-server" },
+    { name = "pp-telemetry", editable = "packages/pi-telemetry" },
+    { name = "pp-tui", editable = "packages/pi-tui" },
 ]
 
 [package.metadata.requires-dev]
@@ -822,6 +754,78 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.0" },
     { name = "pytest-xdist", specifier = ">=3.6" },
     { name = "ruff", specifier = ">=0.8" },
+]
+
+[[package]]
+name = "pp-rpc-client"
+version = "0.1.0"
+source = { editable = "packages/pi-client" }
+dependencies = [
+    { name = "pp-rpc-protocol" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pp-rpc-protocol", editable = "packages/pi-protocol" }]
+
+[[package]]
+name = "pp-rpc-protocol"
+version = "0.1.0"
+source = { editable = "packages/pi-protocol" }
+dependencies = [
+    { name = "jsonschema" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "jsonschema", specifier = ">=4.23" }]
+
+[[package]]
+name = "pp-rpc-server"
+version = "0.1.0"
+source = { editable = "packages/pi-server" }
+dependencies = [
+    { name = "pp-agent-core" },
+    { name = "pp-ai" },
+    { name = "pp-rpc-protocol" },
+]
+
+[package.dev-dependencies]
+test = [
+    { name = "pp-rpc-client" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pp-agent-core", editable = "packages/pi-agent" },
+    { name = "pp-ai", editable = "packages/pi-ai" },
+    { name = "pp-rpc-protocol", editable = "packages/pi-protocol" },
+]
+
+[package.metadata.requires-dev]
+test = [{ name = "pp-rpc-client", editable = "packages/pi-client" }]
+
+[[package]]
+name = "pp-telemetry"
+version = "0.1.0"
+source = { editable = "packages/pi-telemetry" }
+
+[[package]]
+name = "pp-tui"
+version = "0.1.0"
+source = { editable = "packages/pi-tui" }
+dependencies = [
+    { name = "wcwidth" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "wcwidth", specifier = ">=0.2" }]
+
+[[package]]
+name = "pygments"
+version = "2.20.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c3/b2/bc9c9196916376152d655522fdcebac55e66de6603a76a02bca1b6414f6c/pygments-2.20.0.tar.gz", hash = "sha256:6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f", size = 4955991, upload-time = "2026-03-29T13:29:33.898Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl", hash = "sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176", size = 1231151, upload-time = "2026-03-29T13:29:30.038Z" },
 ]
 
 [[package]]

@@ -1,33 +1,38 @@
 [project]
-name = "pypi-monorepo"
-version = "0.0.1"
+name = "pp-monorepo"
+version = "0.1.0"
 description = "Python port of the pi monorepo (agent, ai, tui, coding-agent)"
 requires-python = ">=3.11"
 dependencies = [
-    "pi-telemetry",
-    "pi-ai",
-    "pi-agent",
-    "pi-tui",
-    "pi-protocol",
-    "pi-client",
-    "pi-server",
-    "pi-coding-agent",
-    "pi-evals",
+    "pp-telemetry",
+    "pp-ai",
+    "pp-agent-core",
+    "pp-tui",
+    "pp-rpc-protocol",
+    "pp-rpc-client",
+    "pp-rpc-server",
+    "pp-coding-agent",
+    "pp-evals",
 ]
+
+# The root project only exists to pull the workspace together for development.
+# It must never be built or published; the nine `packages/*` members are.
+[tool.uv]
+package = false
 
 [tool.uv.workspace]
 members = ["packages/*"]
 
 [tool.uv.sources]
-pi-telemetry = { workspace = true }
-pi-ai = { workspace = true }
-pi-agent = { workspace = true }
-pi-tui = { workspace = true }
-pi-protocol = { workspace = true }
-pi-client = { workspace = true }
-pi-server = { workspace = true }
-pi-coding-agent = { workspace = true }
-pi-evals = { workspace = true }
+pp-telemetry = { workspace = true }
+pp-ai = { workspace = true }
+pp-agent-core = { workspace = true }
+pp-tui = { workspace = true }
+pp-rpc-protocol = { workspace = true }
+pp-rpc-client = { workspace = true }
+pp-rpc-server = { workspace = true }
+pp-coding-agent = { workspace = true }
+pp-evals = { workspace = true }
 
 [dependency-groups]
 dev = [

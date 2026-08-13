@@ -118,7 +118,12 @@ git commit -am "release 0.2.0" && git tag v0.2.0 && git push --tags
 
 Pushing the tag runs `.github/workflows/release.yml`, which builds all nine
 distributions and publishes them to PyPI through Trusted Publishing (OIDC), in
-dependency order. Version numbering is the port's own: `UPSTREAM_VERSION` in
+dependency order. No API token is stored in this repository: PyPI is configured
+to trust that one workflow file, and mints a short-lived token per upload. The
+upload order is not cosmetic — the packages pin each other with `==`, so a
+dependency has to land before the package requiring it.
+
+Version numbering is the port's own. `UPSTREAM_VERSION` in
 `pi_coding_agent.core.config` records which upstream release the behaviour is
 aligned with, because this port deliberately omits the features listed below.
 

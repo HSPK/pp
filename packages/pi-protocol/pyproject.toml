@@ -1,18 +1,40 @@
 [project]
-name = "pi-protocol"
-version = "0.0.1"
-description = "RPC protocol types (Python port of @earendil-works/pi-protocol)"
+name = "pp-rpc-protocol"
+version = "0.1.0"
+description = "Transport-neutral CBOR protocol for remote pi sessions (Python port of @earendil-works/pi-protocol)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
+authors = [{ name = "Earendil Works" }]
+maintainers = [{ name = "Hangxing Wei", email = "HSPK@users.noreply.github.com" }]
+keywords = ["pi", "protocol", "cbor", "binary", "framing", "rpc"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "jsonschema>=4.23",
 ]
 
+[project.urls]
+Homepage = "https://github.com/HSPK/pp"
+Repository = "https://github.com/HSPK/pp"
+Issues = "https://github.com/HSPK/pp/issues"
+Upstream = "https://github.com/earendil-works/pi/tree/main/packages/protocol"
+
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pi_protocol"]
 
 [tool.uv.sources]
-

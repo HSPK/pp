@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _distribution_version
 from pathlib import Path
 
 from pi_coding_agent.utils.paths import PathInputOptions, normalize_path
@@ -34,8 +36,32 @@ from pi_coding_agent.utils.paths import PathInputOptions, normalize_path
 CONFIG_DIR_NAME = ".pi"
 APP_NAME = "pi"
 APP_TITLE = "pi"
-PACKAGE_NAME = "pi-coding-agent"
-VERSION = "0.0.1"
+PACKAGE_NAME = "pp-coding-agent"
+
+UPSTREAM_VERSION = "0.84.1"
+"""The `@earendil-works/pi-coding-agent` release this port is aligned with.
+
+Kept out of `VERSION` on purpose: the port's own version tracks the port's
+release history, while this records which upstream tree the behaviour was
+ported from. See the "What is not ported" section of the repository README for
+where the two deliberately diverge.
+"""
+
+
+def _resolve_version() -> str:
+    """The installed distribution's version, the single source of truth.
+
+    Falls back to a source-tree marker when running from a checkout that was
+    never installed (`python -m pi_coding_agent` against a bare `sys.path`),
+    where there is no distribution metadata to read.
+    """
+    try:
+        return _distribution_version(PACKAGE_NAME)
+    except PackageNotFoundError:
+        return "0.0.0+source"
+
+
+VERSION = _resolve_version()
 
 # e.g. PI_CODING_AGENT_DIR / PI_CODING_AGENT_SESSION_DIR
 ENV_AGENT_DIR = f"{APP_NAME.upper()}_CODING_AGENT_DIR"
@@ -131,6 +157,7 @@ __all__ = [
     "ENV_PACKAGE_DIR",
     "ENV_SESSION_DIR",
     "PACKAGE_NAME",
+    "UPSTREAM_VERSION",
     "VERSION",
     "expand_tilde_path",
     "get_agent_dir",

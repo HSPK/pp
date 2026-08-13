@@ -59,7 +59,7 @@ from pi_coding_agent.modes.interactive.theme.theme import (
 
 T = TypeVar("T")
 
-OFFICIAL_PACKAGE_NAME = "pi-coding-agent"
+OFFICIAL_PACKAGE_NAME = "pp-coding-agent"
 OFFICIAL_APP_NAME = "pi"
 OFFICIAL_CONFIG_DIR_NAME = ".pi"
 

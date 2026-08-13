@@ -9,6 +9,19 @@ echo "== ruff check =="
 uv run ruff check packages/
 
 echo
+echo "== version consistency =="
+# The nine packages release in lockstep with `==` pinned internal deps; a
+# hand-edited version that only lands in one file has to fail here rather than
+# at publish time. See scripts/set_version.py.
+uv run python scripts/set_version.py --check
+
+echo
+echo "== cross-package dependency declarations =="
+# `uv sync --all-packages` hides an undeclared sibling import; a standalone
+# wheel install does not. See scripts/check_dependencies.py.
+uv run python scripts/check_dependencies.py
+
+echo
 echo "== ruff format --check =="
 uv run ruff format --check packages/
 

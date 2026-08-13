@@ -1,14 +1,41 @@
 [project]
-name = "pi-evals"
-version = "0.0.1"
-description = "Behavioral, model-backed evals for Pi workflows (Python port of @earendil-works/pi)"
+name = "pp-evals"
+version = "0.1.0"
+description = "Behavioral, model-backed evals for Pi workflows (Python port of @earendil-works/pi-evals)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
+authors = [{ name = "Mario Zechner" }]
+maintainers = [{ name = "Hangxing Wei", email = "HSPK@users.noreply.github.com" }]
+keywords = ["evals", "ai", "llm", "agent", "benchmark", "pytest", "pi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
-    "pi-ai",
-    "pi-agent",
-    "pi-coding-agent",
+    "pp-ai==0.1.0",
+    "pp-agent-core==0.1.0",
+    "pp-coding-agent==0.1.0",
+    # Not merely a test dependency: `pi_evals` *is* a pytest plugin (see the
+    # `pytest11` entry point below) and imports pytest at runtime.
     "pytest>=8.3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/HSPK/pp"
+Repository = "https://github.com/HSPK/pp"
+Issues = "https://github.com/HSPK/pp/issues"
+Upstream = "https://github.com/earendil-works/pi/tree/main/packages/evals"
 
 [project.scripts]
 pp-evals = "pi_evals.run_evals:main"
@@ -17,13 +44,13 @@ pp-evals = "pi_evals.run_evals:main"
 pi_evals = "pi_evals.vitest_evals.reporter"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pi_evals"]
 
 [tool.uv.sources]
-pi-ai = { workspace = true }
-pi-agent = { workspace = true }
-pi-coding-agent = { workspace = true }
+pp-ai = { workspace = true }
+pp-agent-core = { workspace = true }
+pp-coding-agent = { workspace = true }
