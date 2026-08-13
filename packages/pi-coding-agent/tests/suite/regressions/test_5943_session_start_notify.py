@@ -1,16 +1,11 @@
 """Python port of `packages/coding-agent/test/suite/regressions/5943-session-start-notify.test.ts`.
 
-Three of the seven TypeScript cases are portable; the other four pin behavior of
+Four of the seven TypeScript cases are portable; the other three pin behavior of
 machinery this port deliberately omits:
 
 * `renders loaded resources before restored messages without stale entries`
   needs `showLoadedResources`; this port never fills
   `loaded_resources_container` (no startup resource banner).
-* `renders replacement session state before session_start handlers can notify`
-  needs `InteractiveMode.rebindCurrentSession` plus
-  `bindExtensions({uiContext})`; neither the rebind method nor the extension
-  UI host (`ctx.ui.notify`) exists here, so there is no `apply/render/
-  subscribe/bind/notify` ordering to assert.
 * `runs the reload render hook before reload session_start handlers can notify`
   needs `AgentSession.reload({beforeSessionStart})`, which this port does not
   have (and `ctx.ui.notify` again).
@@ -31,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import pytest
 from harness import create_harness, drain_extension_actions
@@ -38,6 +34,7 @@ from interactive_harness import make_interactive_mode
 from pi_ai.providers.faux import faux_assistant_message
 from pi_coding_agent.core.agent_session import AgentSessionEvent
 from pi_coding_agent.core.extensions.loader import ExtensionAPI
+from pi_coding_agent.modes.interactive.interactive_mode import InteractiveMode
 
 
 def _message_text(message: object) -> str:
@@ -134,5 +131,81 @@ async def test_subscribes_before_session_start_handlers_send_user_messages(tmp_p
         assert "message_start:user:user from start" in events
         assert "message_end:user:user from start" in events
         assert "message_end:assistant:assistant from start" in events
+    finally:
+        harness.cleanup()
+
+
+async def test_renders_replacement_session_state_before_session_start_handlers_can_notify(
+    tmp_path: Path,
+) -> None:
+    """`apply -> render -> subscribe -> bind -> notify`.
+
+    A `session_start` handler that notifies must do so *after* the replacement
+    transcript is on screen and a listener is attached, or the rebuild wipes
+    its notification and nothing observes the messages it sends.
+    """
+    events: list[str] = []
+
+    def factory(pi: ExtensionAPI) -> None:
+        def on_session_start(_event, ctx) -> None:
+            ctx.ui.notify("Hello Error", "error")
+
+        pi.on("session_start", on_session_start)
+
+    harness = await create_harness(tmp_path, extension_factories=[factory])
+    try:
+        session = harness.session
+
+        class _RebindContext:
+            """The TypeScript test's hand-built context, as `self`."""
+
+            def __init__(self) -> None:
+                self._unsubscribe = None
+                self.compaction_queued_messages: list[Any] = []
+                self.session = session
+                self.footer = self
+                self.ui = self
+
+            # `_rebind_current_session` installs `InteractiveExtensionUIContext(self)`
+            # on the replacement runner, so the notify surface has to live here:
+            # that is the object the handler's `ctx.ui` reaches.
+            def show_error(self, message: str) -> None:
+                events.append(f"notify:{message}")
+
+            def show_status(self, message: str) -> None:
+                events.append(f"notify:{message}")
+
+            def show_warning(self, message: str) -> None:
+                events.append(f"notify:{message}")
+
+            def _apply_runtime_settings(self) -> None:
+                events.append("apply")
+
+            def _rebuild_chat_from_session(self) -> None:
+                events.append("render")
+
+            def _subscribe_to_agent(self) -> None:
+                events.append("subscribe")
+
+            def _update_available_provider_count(self) -> None: ...
+            def _update_editor_border_color(self) -> None: ...
+            def _update_terminal_title(self) -> None: ...
+            def set_session(self, _session: Any) -> None: ...
+            def request_render(self) -> None: ...
+
+        context = _RebindContext()
+
+        original_bind = session.bind_extensions
+
+        async def bind_extensions() -> None:
+            events.append("bind")
+            await original_bind()
+
+        session.bind_extensions = bind_extensions  # type: ignore[method-assign]
+
+        await InteractiveMode._rebind_current_session(context, session, render_before_bind=True)
+        await drain_extension_actions()
+
+        assert events == ["apply", "render", "subscribe", "bind", "notify:Hello Error"]
     finally:
         harness.cleanup()
