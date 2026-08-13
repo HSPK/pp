@@ -110,18 +110,31 @@ hides:
 To cut a release:
 
 ```bash
+git switch -c release-0.2.0
 python scripts/set_version.py 0.2.0   # rewrites all 9 versions and every == pin
 uv lock && uv sync --all-packages
 ./check.sh
-git commit -am "release 0.2.0" && git tag v0.2.0 && git push --tags
+git commit -am "release 0.2.0"
+git push -u origin release-0.2.0
+gh pr create --fill                   # ci.yml must pass before it can merge
+gh pr merge --squash
+
+git switch main && git pull
+git tag v0.2.0 && git push origin v0.2.0
 ```
+
+`main` is protected: it takes commits through pull requests only, and a pull
+request cannot merge until `ci.yml` is green. The tag goes on `main` *after*
+the merge, because the tag is what publishes.
 
 Pushing the tag runs `.github/workflows/release.yml`, which builds all nine
 distributions and publishes them to PyPI through Trusted Publishing (OIDC), in
 dependency order. No API token is stored in this repository: PyPI is configured
 to trust that one workflow file, and mints a short-lived token per upload. The
 upload order is not cosmetic — the packages pin each other with `==`, so a
-dependency has to land before the package requiring it.
+dependency has to land before the package requiring it. Once every upload has
+landed, the workflow creates a GitHub Release for the tag carrying the same
+wheels and sdists.
 
 Version numbering is the port's own. `UPSTREAM_VERSION` in
 `pi_coding_agent.core.config` records which upstream release the behaviour is
