@@ -1454,13 +1454,12 @@ class AgentSession:
         """Emit this session's `session_start` extension event.
 
         Port of the tail of TypeScript's `bindExtensions()`. The binding half
-        of the TS method wires the extension UI host (widgets, custom
-        header/footer, dialogs) into the runner; that host is a documented
-        omission in this port (see README), and the core context bindings are
-        already applied eagerly in `__init__`, so only the event emission
-        remains. `AgentSessionRuntime` calls this after every session
-        replacement so extensions see the same `session_start` sequence they
-        do upstream.
+        of the TS method wires the extension UI host into the runner; here the
+        interactive mode installs its own `ExtensionUIContext` on the runner
+        just before calling this, and the core context bindings are already
+        applied eagerly in `__init__`, so only the event emission remains.
+        `AgentSessionRuntime` calls this after every session replacement so
+        extensions see the same `session_start` sequence they do upstream.
         """
         if self._extension_runner.has_handlers("session_start"):
             await self._extension_runner.emit(self._session_start_event)

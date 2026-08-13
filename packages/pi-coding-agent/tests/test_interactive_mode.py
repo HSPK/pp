@@ -1832,3 +1832,125 @@ def test_a_user_message_is_separated_from_the_message_above_it(tmp_path: Path, m
             await mode.shutdown()
 
     _run(scenario(), timeout=30)
+
+
+# --------------------------------------------------------------------------
+# extension widgets
+# --------------------------------------------------------------------------
+
+
+def test_widget_container_above_holds_one_spacer_when_no_widgets_are_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS `init()` calls `renderWidgets()` to seed the default spacer.
+
+    That single blank row is the gap between the transcript and the prompt, so
+    losing it makes the prompt sit flush against the last response.
+    """
+
+    async def scenario() -> None:
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch)
+        try:
+            await mode.init()
+
+            assert _plain(_rendered_rows(mode.widget_container_above)) == [""]
+            assert _rendered_rows(mode.widget_container_below) == []
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)
+
+
+def test_widgets_render_in_the_container_their_placement_selects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    async def scenario() -> None:
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch)
+        try:
+            await mode.init()
+
+            mode.set_extension_widget("build", ["building..."])
+            # Above the editor the widget is preceded by a separator row.
+            assert _plain(_rendered_rows(mode.widget_container_above)) == ["", " building..."]
+
+            # Re-registering the same key moves the widget instead of cloning it.
+            mode.set_extension_widget("build", ["building..."], placement="belowEditor")
+            assert _plain(_rendered_rows(mode.widget_container_above)) == [""]
+            assert _plain(_rendered_rows(mode.widget_container_below)) == [" building..."]
+
+            # ...and back again, so removal is checked in both directions.
+            mode.set_extension_widget("build", ["done"])
+            assert _plain(_rendered_rows(mode.widget_container_above)) == ["", " done"]
+            assert _rendered_rows(mode.widget_container_below) == []
+
+            mode.clear_extension_widgets()
+            assert _plain(_rendered_rows(mode.widget_container_above)) == [""]
+            assert _rendered_rows(mode.widget_container_below) == []
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)
+
+
+def test_a_long_widget_is_truncated_so_it_cannot_push_the_editor_off_screen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    async def scenario() -> None:
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch)
+        try:
+            await mode.init()
+
+            mode.set_extension_widget("noisy", [f"line {index}" for index in range(25)])
+
+            rows = _plain(_rendered_rows(mode.widget_container_above))
+            # separator + MAX_WIDGET_LINES + the truncation notice
+            assert len(rows) == 1 + mode.MAX_WIDGET_LINES + 1
+            assert rows[1] == " line 0"
+            assert rows[mode.MAX_WIDGET_LINES] == " line 9"
+            assert rows[-1] == " ... (widget truncated)"
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)
+
+
+def test_a_widget_factory_receives_the_tui_and_theme(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    async def scenario() -> None:
+        from pi_tui.components.text import Text as TuiText
+
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch)
+        seen: list[tuple[Any, Any]] = []
+        try:
+            await mode.init()
+
+            def factory(tui: Any, thm: Any) -> Any:
+                seen.append((tui, thm))
+                return TuiText("from factory", 1, 0)
+
+            mode.set_extension_widget("custom", factory)
+
+            assert seen[0][0] is mode.ui
+            assert seen[0][1] is not None
+            assert _plain(_rendered_rows(mode.widget_container_above)) == ["", " from factory"]
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)
+
+
+def test_an_extension_can_draw_a_widget_through_the_ui_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The wiring test: `set_ui_context` must reach a real extension handler."""
+
+    def on_session_start(_event: Any, ctx: Any) -> None:
+        ctx.ui.set_widget("hello", ["from an extension"])
+
+    extension = Extension(path="inline.py", resolved_path="inline.py", handlers={"session_start": [on_session_start]})
+
+    async def scenario() -> None:
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch, extensions=[extension])
+        try:
+            await mode.init()
+
+            assert _plain(_rendered_rows(mode.widget_container_above)) == ["", " from an extension"]
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)

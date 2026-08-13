@@ -29,15 +29,39 @@ This repository is a Python implementation of that TypeScript project. It is a
 port, not a rewrite: the goal is that a given input produces the same observable
 behaviour as upstream, down to error strings and on-disk formats.
 
-| TypeScript package | Python package | Module |
-| --- | --- | --- |
-| `@earendil-works/pi-telemetry` | `packages/pi-telemetry` | `pi_telemetry` |
-| `@earendil-works/pi-ai` | `packages/pi-ai` | `pi_ai` |
-| `@earendil-works/pi-agent-core` | `packages/pi-agent` | `pi_agent` |
-| `@earendil-works/pi-tui` | `packages/pi-tui` | `pi_tui` |
-| `@earendil-works/pi-protocol` | `packages/pi-protocol` | `pi_protocol` |
-| `@earendil-works/pi` (coding agent) | `packages/pi-coding-agent` | `pi_coding_agent` |
-| `@earendil-works/pi-evals` | `packages/pi-evals` | `pi_evals` |
+| TypeScript package | PyPI distribution | Directory | Import module |
+| --- | --- | --- | --- |
+| `@earendil-works/pi-telemetry` | `pp-telemetry` | `packages/pi-telemetry` | `pi_telemetry` |
+| `@earendil-works/pi-ai` | `pp-ai` | `packages/pi-ai` | `pi_ai` |
+| `@earendil-works/pi-agent-core` | `pp-agent-core` | `packages/pi-agent` | `pi_agent` |
+| `@earendil-works/pi-tui` | `pp-tui` | `packages/pi-tui` | `pi_tui` |
+| `@earendil-works/pi-protocol` | `pp-rpc-protocol` | `packages/pi-protocol` | `pi_protocol` |
+| `@earendil-works/pi-client` | `pp-rpc-client` | `packages/pi-client` | `pi_client` |
+| `@earendil-works/pi-server` | `pp-rpc-server` | `packages/pi-server` | `pi_server` |
+| `@earendil-works/pi` (coding agent) | `pp-coding-agent` | `packages/pi-coding-agent` | `pi_coding_agent` |
+| `@earendil-works/pi-evals` | `pp-evals` | `packages/pi-evals` | `pi_evals` |
+
+The three names that differ from a mechanical translation do so because the
+obvious name was already taken on PyPI by an unrelated project: `pi-agent` and
+`pi-coding-agent` belong to other authors, and `pp-server` is
+[`pp.server`](https://pypi.org/project/pp.server/), an actively maintained
+package. `pp-rpc-protocol`/`pp-rpc-client`/`pp-rpc-server` are named as a set
+because they are one stack: framed CBOR over a Unix socket.
+
+Import modules deliberately keep their `pi_*` spelling. They name what the code
+*is* — a port of pi — and every module docstring, test and porting convention
+refers to them.
+
+## Install
+
+```bash
+pip install pp-coding-agent   # or: uv tool install pp-coding-agent
+pp                            # start the agent
+```
+
+The nine distributions are released in lockstep: they always share one version,
+and each pins its siblings with `==`. Installing `pp-coding-agent` pulls the
+whole stack.
 
 Requires Python 3.11+. The workspace is managed with
 [uv](https://docs.astral.sh/uv/).
@@ -69,6 +93,35 @@ counterpart. Treat it as an index, not a verdict — it matches filenames in
 docstrings and cannot tell a faithful port from a weakened one. Reading the two
 files side by side is the only real check.
 
+## Releasing
+
+All nine distributions share one version and pin each other with `==`. Two
+checks in `check.sh` enforce the properties that a workspace install otherwise
+hides:
+
+- `scripts/set_version.py --check` — every package declares the same version,
+  and no internal dependency is left unpinned. An unpinned sibling is not a
+  style problem: `[tool.uv.sources]` does not survive into a wheel, so
+  `Requires-Dist: pp-ai` would be resolved from PyPI at install time.
+- `scripts/check_dependencies.py` — every cross-package import is declared.
+  `uv sync --all-packages` puts all nine on `sys.path`, so an undeclared
+  sibling import passes the whole test suite and only fails for the end user.
+
+To cut a release:
+
+```bash
+python scripts/set_version.py 0.2.0   # rewrites all 9 versions and every == pin
+uv lock && uv sync --all-packages
+./check.sh
+git commit -am "release 0.2.0" && git tag v0.2.0 && git push --tags
+```
+
+Pushing the tag runs `.github/workflows/release.yml`, which builds all nine
+distributions and publishes them to PyPI through Trusted Publishing (OIDC), in
+dependency order. Version numbering is the port's own: `UPSTREAM_VERSION` in
+`pi_coding_agent.core.config` records which upstream release the behaviour is
+aligned with, because this port deliberately omits the features listed below.
+
 ## What is not ported
 
 Behaviour that upstream has and this port does not. Each entry is a deliberate
@@ -80,8 +133,12 @@ decision with a reason, not an oversight:
   package.
 - **The `/arminsayshi` and `/dementedelves` easter eggs** and the announcement
   banner, which are bundled ASCII-art animations and a PNG asset.
-- **The extension UI host** (widgets, custom header/footer, extension-driven
-  dialogs, terminal input listeners) and the startup resource/diagnostic report.
+- **Most of the extension UI host**: widgets and the select/confirm/input
+  dialogs, footer statuses, terminal title and the tools-expanded toggle *are*
+  wired; custom header/footer components, terminal input listeners,
+  working-indicator control, editor control, autocomplete providers and the
+  theme accessors are not. The startup resource/diagnostic report is not
+  ported either.
 - **Extension provider registration** (`registerProvider`/`unregisterProvider`)
   and the **remote model catalog** (`refreshModels`, `ModelsPublication`), which
   together form a dynamic catalog layer this port does not implement. Providers
@@ -185,3 +242,18 @@ Every ported module needs tests. Tests are written against the Python API and
 must assert real behaviour, not just that a function is callable. Provider
 network calls are exercised against an in-process fake transport, never a real
 endpoint.
+
+## License and attribution
+
+MIT, the same licence as upstream.
+
+This project is a derivative work of [pi](https://github.com/earendil-works/pi)
+by Mario Zechner and Earendil Works. The original copyright notice is preserved
+in [LICENSE](LICENSE) alongside the notice for the Python port, and each
+published distribution carries that file and credits the original author in its
+`authors` metadata.
+
+It is an independent port and is not affiliated with or endorsed by the
+upstream project. Bugs found here should be reported to
+[this repository](https://github.com/HSPK/pp/issues), not to upstream, unless
+they are reproducible against the TypeScript implementation.

@@ -15,7 +15,7 @@ This document describes the Python port. Python extensions are not TypeScript ex
 - **Session access** - Read session state from `ctx.session_manager`
 - **Custom tool state** - Store branch-aware state in tool result `details`
 
-**Not available in the Python port:** the extension UI host, extension-driven widgets/custom components/renderers, extension shortcuts, extension CLI flags, dynamic provider registration, `resources_discover`, `user_bash`, and extension hot reload.
+**Not available in the Python port:** custom header/footer components, extension-driven renderers, terminal input listeners, extension shortcuts, extension CLI flags, dynamic provider registration, `resources_discover`, `user_bash`, and extension hot reload. Widgets and the `ctx.ui` dialogs *are* available in interactive mode (see [UI Context](#ui-context)).
 
 See [examples/extensions/](../examples/extensions/) for working Python implementations.
 
@@ -726,11 +726,27 @@ All handlers receive `ctx: ExtensionContext`.
 
 ### ctx.ui
 
-`ctx.ui` has the protocol methods `select`, `confirm`, `input`, `notify`, `set_status`, `set_title`, `get_tools_expanded`, and `set_tools_expanded`. The stock Python CLI does not bind the extension UI host, so `ctx.has_ui` is normally `False` and `ctx.ui` is a no-op context. Guard UI calls with `if ctx.has_ui:`.
+`ctx.ui` has the protocol methods `select`, `confirm`, `input`, `notify`, `set_status`, `set_title`, `get_tools_expanded`, `set_tools_expanded`, and `set_widget`.
+
+Interactive mode binds a real context, so `ctx.has_ui` is `True` there. Print, JSON and RPC modes have no UI, so `ctx.ui` is a no-op context and `ctx.has_ui` is `False`. Guard UI calls with `if ctx.has_ui:` so an extension works in every mode.
+
+#### ctx.ui.set_widget
+
+```python
+ctx.ui.set_widget("build-status", ["Build: passing"])
+ctx.ui.set_widget("build-status", ["Build: passing"], "belowEditor")
+ctx.ui.set_widget("build-status", None)  # remove
+```
+
+Widgets are keyed. Setting an existing key replaces the widget, including when the placement changes, so a key never appears twice. `None` removes it. `placement` is `"aboveEditor"` (default) or `"belowEditor"`.
+
+Content is either a list of lines or a factory `(tui, theme) -> Component` for a live component. A line list is capped at 10 lines and the excess is replaced by a `... (widget truncated)` marker, so a runaway widget cannot push the prompt off screen.
+
+Widgets belong to the session that created them: switching sessions clears them.
 
 ### ctx.mode
 
-Current run mode: `"tui"`, `"rpc"`, `"json"`, or `"print"`. Because the stock CLI does not bind extension UI context, extensions commonly see the default runner mode unless a custom host sets it.
+Current run mode: `"tui"`, `"rpc"`, `"json"`, or `"print"`. Interactive mode sets `"tui"`; the other modes leave the default runner mode unless a custom host sets it.
 
 ### ctx.hasUI
 
@@ -1364,13 +1380,15 @@ def pi_extension(pi) -> None:
 
 ## Custom UI
 
-The extension UI host is not ported. The stock CLI does not bind a real `ExtensionUIContext`, so UI methods are no-ops unless a custom host supplies one.
+Interactive mode binds a real `ExtensionUIContext`, so dialogs and `set_widget` work there. In print, JSON and RPC modes the UI methods are no-ops.
 
-**For custom components, see [tui.md](tui.md)** for the underlying TUI component library. Those patterns are not callable through Python extensions today.
+Not ported: custom header/footer components, editor control, terminal input listeners, autocomplete providers and theme accessors.
+
+**For custom components, see [tui.md](tui.md)** for the underlying TUI component library. A widget factory can return any of those components.
 
 ### Dialogs
 
-`select`, `confirm`, `input`, and `notify` exist on the protocol, but the stock CLI extension host does not wire them.
+`select`, `confirm`, `input`, and `notify` are wired in interactive mode and open the corresponding dialog in place of the prompt until the user answers.
 
 ```python
 async def maybe_confirm(ctx) -> bool:
@@ -1385,11 +1403,11 @@ Dialog timeout options are not part of the Python `ExtensionUIContext` protocol.
 
 #### Manual Dismissal with AbortSignal
 
-AbortSignal-driven extension dialogs are not available in the stock Python CLI.
+The Python `ExtensionUIContext` protocol takes no `AbortSignal`, so a dialog is dismissed by the user, not by the extension.
 
 ### Widgets, Status, and Footer
 
-`set_status` and `set_title` exist on the protocol. Widgets, custom headers, custom footers, working indicators, editor text, paste handling, autocomplete providers, tool expansion UI, editor replacement, and theme switching through extensions are not ported.
+`set_status`, `set_title` and `set_widget` are available (see [ctx.ui.set_widget](#ctxuiset_widget)). Custom headers, custom footers, working indicators, editor text, paste handling, autocomplete providers, editor replacement, and theme switching through extensions are not ported.
 
 ### Autocomplete Providers
 
@@ -1425,7 +1443,7 @@ Theme objects exist under `pi_coding_agent.modes.interactive.theme`, but extensi
 
 | Mode | `ctx.mode` | `ctx.has_ui` | Notes |
 |------|------------|--------------|-------|
-| Interactive | `"tui"` if a host binds it | Host-dependent | The stock CLI does not bind extension UI context |
+| Interactive | `"tui"` | `True` | Widgets, dialogs, status, title and tools-expanded are wired |
 | RPC | `"rpc"` if a host binds it | Host-dependent | Legacy stdio RPC mode is not ported |
 | JSON | `"json"` if a host binds it | `False` unless supplied | Event stream to stdout |
 | Print | `"print"` | `False` | Default runner context |

@@ -18,11 +18,14 @@ This module ports the parts that make the interactive terminal actually work:
 * `!`/`!!` bash execution and the pending-message display,
 * signal handling and shutdown.
 
-Not ported yet, and *documented rather than silently missing*: the extension UI
-host (widgets, custom header/footer, extension dialogs, terminal input
-listeners), the resource/diagnostic startup report, the startup changelog
-banner (``showStartupNoticesIfNeeded``) and update notifications, tmux
-keyboard detection, and fullscreen mode switching (``switchTuiMode``).
+The extension UI host is wired for the subset the port's `ExtensionUIContext`
+protocol keeps: widgets, the select/confirm/input dialogs, footer statuses,
+terminal title and the tools-expanded toggle. Not ported yet, and *documented
+rather than silently missing*: the rest of that host (custom header/footer
+components, terminal input listeners, working-indicator control, editor
+control, autocomplete providers, theme accessors), the resource/diagnostic
+startup report, the startup changelog banner (``showStartupNoticesIfNeeded``)
+and update notifications, and tmux keyboard detection.
 
 The only slash commands with no implementation are the two easter eggs
 ``/arminsayshi`` and ``/dementedelves``; each has a ``_unsupported_command``
@@ -97,7 +100,7 @@ from ...core.config import (
     get_debug_log_path,
     get_share_viewer_url,
 )
-from ...core.extensions.types import UserBashEvent
+from ...core.extensions.types import UserBashEvent, WidgetFactory, WidgetPlacement
 from ...core.footer_data_provider import FooterDataProvider
 from ...core.http_dispatcher import configure_http_dispatcher, format_http_idle_timeout_ms
 from ...core.model_resolver import ScopedModel, find_exact_model_reference_match, resolve_model_scope_from_models
@@ -114,6 +117,7 @@ from .components.bash_execution import BashExecutionComponent
 from .components.custom_editor import CustomEditor
 from .components.custom_message import CustomEntryComponent, CustomMessageComponent
 from .components.dynamic_border import DynamicBorder
+from .components.extension_dialogs import ExtensionInputComponent, ExtensionSelectorComponent
 from .components.footer import FooterComponent
 from .components.keybinding_hints import key_hint, key_text, raw_key_hint
 from .components.login_dialog import LoginCancelledError, LoginDialogComponent
@@ -258,6 +262,13 @@ def _debug_encode(message: object) -> object:
     return repr(message)
 
 
+def _dispose_widget(widget: Component | None) -> None:
+    """Release a widget's resources. `dispose` is optional on TUI components."""
+    dispose = getattr(widget, "dispose", None)
+    if callable(dispose):
+        dispose()
+
+
 def _quote_if_needed(value: str) -> str:
     """Shell-quote a path for the resume hint unless it is already shell-safe."""
     if value and re.fullmatch(r"[a-zA-Z0-9_\-./~:@]*", value):
@@ -398,6 +409,7 @@ class InteractiveMode:
         # `/clone` just disposed, and the replacement never gets its
         # `session_start`.
         self.runtime_host.set_rebind_session(self._rebind_current_session)
+        self.runtime_host.set_before_session_invalidate(self._reset_extension_ui)
         self.options = options or InteractiveModeOptions()
         self.version = VERSION
 
@@ -425,6 +437,10 @@ class InteractiveMode:
         self.document_container.add_child(self.chat_container)
         self.pending_messages_container = Container()
         self.status_container = Container()
+        self.widget_container_above = Container()
+        self.widget_container_below = Container()
+        self.extension_widgets_above: dict[str, Component] = {}
+        self.extension_widgets_below: dict[str, Component] = {}
 
         self.default_editor = CustomEditor(self.ui, get_editor_theme(), self.keybindings)
         self.editor: Any = self.default_editor
@@ -517,6 +533,9 @@ class InteractiveMode:
 
         self._register_signal_handlers()
 
+        # Seeds `widget_container_above` with its default spacer before the
+        # first paint, matching TS's `renderWidgets()` in `init()`.
+        self._render_widgets()
         self._mount_layout()
         self.ui.set_focus(self.editor)
 
@@ -540,9 +559,10 @@ class InteractiveMode:
 
         # Port of TS `rebindCurrentSession()`, which `init()` awaits before rendering the
         # initial messages: it binds the extension host and, in doing so, emits
-        # `session_start`. The UI-host half of the binding is a documented omission, but
-        # the event must still reach extensions or no `on_session_start` handler ever runs.
+        # `session_start`. This port wires the subset of the UI host its
+        # `ExtensionUIContext` protocol keeps; the rest is a documented omission.
         startup_session = self.session
+        startup_session.extension_runner.set_ui_context(InteractiveExtensionUIContext(self), "tui")
         await startup_session.bind_extensions()
 
         # TS's `if (this.session !== session) return;`: a replacement that
@@ -640,7 +660,9 @@ class InteractiveMode:
             self.document_container,
             self.pending_messages_container,
             self.status_container,
+            self.widget_container_above,
             self.editor_container,
+            self.widget_container_below,
             self.footer_container,
         ):
             self.ui.add_child(container)
@@ -660,7 +682,9 @@ class InteractiveMode:
                 [
                     StackEntry(component=self.pending_messages_container, shrink=1, min_size=0),
                     StackEntry(component=self.status_container, shrink=1, min_size=0),
+                    StackEntry(component=self.widget_container_above, shrink=1, min_size=0),
                     StackEntry(component=self.editor_container, shrink=1, min_size=3),
+                    StackEntry(component=self.widget_container_below, shrink=1, min_size=0),
                     StackEntry(component=self.footer_container, shrink=1, min_size=1),
                 ]
             )
@@ -817,6 +841,101 @@ class InteractiveMode:
         # and only when `clearOnShrink` is on; the alt screen owns its viewport.
         if had_active_status_indicator and self.tui_mode == "regular" and self.ui.get_clear_on_shrink():
             self.status_container.add_child(self.idle_status)
+
+    # -- extension widgets --------------------------------------------------
+
+    MAX_WIDGET_LINES = 10
+    """Cap on the lines one string-array widget may occupy, so a runaway
+    extension cannot push the editor off the viewport."""
+
+    def _render_widgets(self) -> None:
+        self._render_widget_container(
+            self.widget_container_above, self.extension_widgets_above, spacer_when_empty=True, leading_spacer=True
+        )
+        self._render_widget_container(
+            self.widget_container_below, self.extension_widgets_below, spacer_when_empty=False, leading_spacer=False
+        )
+        self.ui.request_render()
+
+    def _render_widget_container(
+        self,
+        container: Container,
+        widgets: dict[str, Component],
+        *,
+        spacer_when_empty: bool,
+        leading_spacer: bool,
+    ) -> None:
+        container.clear()
+
+        if not widgets:
+            # The above-editor container keeps one blank row even with no
+            # widgets: it is the gap between the transcript and the prompt.
+            if spacer_when_empty:
+                container.add_child(Spacer(1))
+            return
+
+        if leading_spacer:
+            container.add_child(Spacer(1))
+        for component in widgets.values():
+            container.add_child(component)
+
+    def set_extension_widget(
+        self,
+        key: str,
+        content: list[str] | WidgetFactory | None,
+        placement: WidgetPlacement = "aboveEditor",
+    ) -> None:
+        """Add, replace or remove one extension widget.
+
+        `content` is either the widget's literal lines, a factory taking
+        ``(tui, theme)``, or `None` to remove the widget. A key exists in at
+        most one placement, so re-registering it under a new placement moves it
+        rather than duplicating it.
+        """
+        for widgets in (self.extension_widgets_above, self.extension_widgets_below):
+            existing = widgets.pop(key, None)
+            _dispose_widget(existing)
+
+        if content is None:
+            self._render_widgets()
+            return
+
+        component: Component
+        if isinstance(content, list):
+            container = Container()
+            for line in content[: self.MAX_WIDGET_LINES]:
+                container.add_child(Text(line, 1, 0))
+            if len(content) > self.MAX_WIDGET_LINES:
+                container.add_child(Text(theme.fg("muted", "... (widget truncated)"), 1, 0))
+            component = container
+        else:
+            component = content(self.ui, theme)
+
+        target = self.extension_widgets_below if placement == "belowEditor" else self.extension_widgets_above
+        target[key] = component
+        self._render_widgets()
+
+    def clear_extension_widgets(self) -> None:
+        for widgets in (self.extension_widgets_above, self.extension_widgets_below):
+            for widget in widgets.values():
+                _dispose_widget(widget)
+            widgets.clear()
+        self._render_widgets()
+
+    def _reset_extension_ui(self) -> None:
+        """Drop UI a departing session's extensions installed.
+
+        Port of `resetExtensionUI`, limited to the surfaces this port wires:
+        widgets, footer statuses, and any open extension dialog. Without it a
+        widget or status from the old session would outlive it, since the
+        replacement session loads its own extensions from scratch.
+        """
+        self._hide_selector()
+        self.clear_extension_widgets()
+        self.footer_data_provider.clear_extension_statuses()
+        self.footer.invalidate()
+        self._update_terminal_title()
+        self.ui.request_render()
 
     # -- key handlers -------------------------------------------------------
 
@@ -2507,6 +2626,50 @@ class InteractiveMode:
 
         self._show_selector(ThemeSelectorComponent(current, select, cancel, preview))
 
+    async def show_extension_selector(self, title: str, options: list[str], timeout: int | None = None) -> str | None:
+        """Pick one of `options`, or `None` if the extension cancels.
+
+        Port of `showExtensionSelector`. The dialog replaces the editor for as
+        long as it is open, so the prompt cannot take input behind it.
+        """
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[str | None] = loop.create_future()
+
+        def finish(value: str | None) -> None:
+            self._hide_selector()
+            if not future.done():
+                future.set_result(value)
+
+        self._show_selector(
+            ExtensionSelectorComponent(
+                title,
+                options,
+                finish,
+                lambda: finish(None),
+                tui=self.ui,
+                timeout=timeout,
+                on_toggle_tools_expanded=self._toggle_tool_output_expansion,
+            )
+        )
+        return await future
+
+    async def show_extension_input(
+        self, title: str, placeholder: str | None = None, timeout: int | None = None
+    ) -> str | None:
+        """Read one line of text from the user, or `None` if cancelled."""
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[str | None] = loop.create_future()
+
+        def finish(value: str | None) -> None:
+            self._hide_selector()
+            if not future.done():
+                future.set_result(value)
+
+        self._show_selector(
+            ExtensionInputComponent(title, placeholder, finish, lambda: finish(None), tui=self.ui, timeout=timeout)
+        )
+        return await future
+
     def show_images_selector(self) -> None:
         def select(show: bool) -> None:
             self._hide_selector()
@@ -2821,6 +2984,9 @@ class InteractiveMode:
             self._rebuild_chat_from_session()
             self._subscribe_to_agent()
 
+        # The replacement session carries its own runner, so the UI host has to
+        # be installed again or its extensions would get the null context.
+        session.extension_runner.set_ui_context(InteractiveExtensionUIContext(self), "tui")
         await session.bind_extensions()
         if self.session is not session:
             return
@@ -3031,9 +3197,62 @@ class InteractiveMode:
         return format_resume_command(self.session_manager)
 
 
+class InteractiveExtensionUIContext:
+    """The `ExtensionUIContext` the interactive mode hands to extensions.
+
+    Port of the object literal `bindExtensions()` passes as `uiContext` in
+    `interactive-mode.ts`, narrowed to the methods this port's protocol keeps
+    (see `core/extensions/types.py`). Every method delegates to the mode, so
+    an extension drawing a widget or opening a dialog drives the same code
+    paths the built-in UI uses.
+    """
+
+    def __init__(self, mode: InteractiveMode) -> None:
+        self._mode = mode
+
+    async def select(self, title: str, options: list[str]) -> str | None:
+        return await self._mode.show_extension_selector(title, options)
+
+    async def confirm(self, title: str, message: str) -> bool:
+        return await self._mode._show_confirm(title, message)
+
+    async def input(self, title: str, placeholder: str | None = None) -> str | None:
+        return await self._mode.show_extension_input(title, placeholder)
+
+    def notify(self, message: str, type: Literal["info", "warning", "error"] = "info") -> None:
+        if type == "error":
+            self._mode.show_error(message)
+        elif type == "warning":
+            self._mode.show_warning(message)
+        else:
+            self._mode.show_status(message)
+
+    def set_status(self, key: str, text: str | None) -> None:
+        self._mode.footer_data_provider.set_extension_status(key, text)
+        self._mode.ui.request_render()
+
+    def set_title(self, title: str) -> None:
+        self._mode.ui.terminal.set_title(title)
+
+    def get_tools_expanded(self) -> bool:
+        return self._mode.tool_output_expanded
+
+    def set_tools_expanded(self, expanded: bool) -> None:
+        self._mode.set_tools_expanded(expanded)
+
+    def set_widget(
+        self,
+        key: str,
+        content: list[str] | WidgetFactory | None,
+        placement: WidgetPlacement = "aboveEditor",
+    ) -> None:
+        self._mode.set_extension_widget(key, content, placement)
+
+
 __all__ = [
     "BUILTIN_SLASH_COMMANDS",
     "DynamicBorder",
+    "InteractiveExtensionUIContext",
     "InteractiveMode",
     "InteractiveModeOptions",
     "create_interactive_tui",

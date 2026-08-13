@@ -7,20 +7,19 @@ event handlers, tools, and commands.
 
 **Scope narrowing versus the TypeScript original** (see also
 `extensions/loader.py`'s module docstring for the JS-module substitution):
-this port has no ported TUI (`pi_tui`), no interactive-mode themes
-(`modes/interactive/theme/theme.ts`), no `KeybindingsManager`, and no
-`ModelRegistry` (see `model_runtime.py`'s own documented boundary). Every
-extension-API surface that only exists to plug into those subsystems is
-dropped, not stubbed:
+this port has no `KeybindingsManager` and no `ModelRegistry` (see
+`model_runtime.py`'s own documented boundary), and the interactive mode wires
+only part of the TypeScript extension UI host. Every extension-API surface that
+only exists to plug into those subsystems is dropped, not stubbed:
 
-- **`ExtensionUIContext`** keeps only the headless-safe subset: `select`,
-  `confirm`, `input`, `notify`, `set_status`, `set_title`,
-  `get_tools_expanded`/`set_tools_expanded`. Dropped: `onTerminalInput`,
-  `setWorkingMessage`/`setWorkingVisible`/`setWorkingIndicator`,
-  `setHiddenThinkingLabel`, `setWidget`/`setFooter`/`setHeader` (Component
-  factories), `pasteToEditor`/`setEditorText`/`getEditorText`/`editor`,
+- **`ExtensionUIContext`** keeps the headless-safe subset plus `set_widget`:
+  `select`, `confirm`, `input`, `notify`, `set_status`, `set_title`,
+  `get_tools_expanded`/`set_tools_expanded`, `set_widget`. Dropped:
+  `onTerminalInput`, `setWorkingMessage`/`setWorkingVisible`/
+  `setWorkingIndicator`, `setHiddenThinkingLabel`, `setFooter`/`setHeader`,
+  `pasteToEditor`/`setEditorText`/`getEditorText`/`editor`,
   `addAutocompleteProvider`, `setEditorComponent`/`getEditorComponent`, `theme`
-  and the theme accessors -- all `pi_tui`/theme-shaped.
+  and the theme accessors.
 - **No shortcut/message-renderer/markdown-transformer/entry-renderer
   registration** (`registerShortcut`, `registerMessageRenderer`,
   `registerMarkdownTransformer`, `registerEntryRenderer`): these render into
@@ -46,6 +45,7 @@ from typing import Any, Literal, Protocol
 from pi_agent.types import AgentToolResult, AgentToolUpdateCallback, ThinkingLevel, ToolExecutionMode
 from pi_ai.types import AssistantMessageEvent, ImageContent, Model, TextContent, Usage
 from pi_ai.utils.abort import AbortSignal
+from pi_tui.component import Component
 
 from pi_coding_agent.core.compaction import CompactionResult
 from pi_coding_agent.core.system_prompt import BuildSystemPromptOptions
@@ -119,6 +119,8 @@ __all__ = [
     "TurnStartEvent",
     "UserBashEvent",
     "UserBashEventResult",
+    "WidgetFactory",
+    "WidgetPlacement",
     "define_tool",
 ]
 
@@ -126,6 +128,13 @@ __all__ = [
 # ============================================================================
 # UI Context
 # ============================================================================
+
+
+WidgetPlacement = Literal["aboveEditor", "belowEditor"]
+
+WidgetFactory = Callable[[Any, Any], Component]
+"""Builds a widget component from ``(tui, theme)``, as TypeScript's
+`setWidget` factory does."""
 
 
 class ExtensionUIContext(Protocol):
@@ -146,6 +155,13 @@ class ExtensionUIContext(Protocol):
     def get_tools_expanded(self) -> bool: ...
 
     def set_tools_expanded(self, expanded: bool) -> None: ...
+
+    def set_widget(
+        self,
+        key: str,
+        content: list[str] | WidgetFactory | None,
+        placement: WidgetPlacement = "aboveEditor",
+    ) -> None: ...
 
 
 class NullExtensionUIContext:
@@ -177,6 +193,14 @@ class NullExtensionUIContext:
         return False
 
     def set_tools_expanded(self, expanded: bool) -> None:
+        pass
+
+    def set_widget(
+        self,
+        key: str,
+        content: list[str] | WidgetFactory | None,
+        placement: WidgetPlacement = "aboveEditor",
+    ) -> None:
         pass
 
 

@@ -33,11 +33,22 @@ from typing import Any
 from pi_coding_agent.modes.interactive.interactive_mode import InteractiveMode
 
 
+class _FakeExtensionRunner:
+    """Records the UI host the rebind installs, as `ExtensionRunner` would."""
+
+    def __init__(self) -> None:
+        self.ui_contexts: list[tuple[Any, str]] = []
+
+    def set_ui_context(self, ui: Any = None, mode: str = "print") -> None:
+        self.ui_contexts.append((ui, mode))
+
+
 class _BindableSession:
     """Stands in for `AgentSession`, with a `bind_extensions()` the test resolves."""
 
     def __init__(self) -> None:
         self.bind_future: asyncio.Future[None] = asyncio.get_event_loop().create_future()
+        self.extension_runner = _FakeExtensionRunner()
 
     async def bind_extensions(self) -> None:
         await self.bind_future
