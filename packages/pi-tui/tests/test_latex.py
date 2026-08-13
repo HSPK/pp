@@ -445,6 +445,15 @@ class TestRenderLatex:
             == "    -b±√(b²-4ac)\nx = ────────────\n         2a"
         )
         assert render_latex(r"\frac{x^2+1}{x-1}", RenderLatexOptions(display=True)) == "x²+1\n────\nx-1"
+        assert render_latex("\\frac{1}\n{2}", RenderLatexOptions(display=True)) == "1\n─\n2"
+
+    def test_treats_backslash_before_line_ending_as_control_space(self) -> None:
+        source = "\\boxed{\n(1,1,1),\\ (1,1,2),\\ (1,2,5),\\ (1,5,13),\\ (2,5,29),\\\n(1,13,34),\\ (1,34,89)\n}."
+        assert (
+            render_latex(source, RenderLatexOptions(display=True))
+            == "[(1,1,1), (1,1,2), (1,2,5), (1,5,13), (2,5,29), (1,13,34), (1,34,89)]."
+        )
+        assert render_latex("a\\\r\nb") == "a b"
 
     def test_keeps_nested_display_fractions_linear(self) -> None:
         cases: list[tuple[str, str]] = [

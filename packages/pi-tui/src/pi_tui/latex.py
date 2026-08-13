@@ -975,6 +975,11 @@ class LatexParser:
             return ""
 
         first = self.source[self.position]
+        if first in ("\n", "\r"):
+            self.position += 1
+            if first == "\r" and self.position < len(self.source) and self.source[self.position] == "\n":
+                self.position += 1
+            return " "
         if first.isascii() and first.isalpha():
             start = self.position
             while (
@@ -1151,7 +1156,7 @@ class LatexParser:
             self.stack_fractions = previous_stack_fractions
 
     def _parse_required_argument_value(self) -> str:
-        while self.position < len(self.source) and self.source[self.position] in " \t":
+        while self.position < len(self.source) and self.source[self.position] in " \t\n\r\f\v":
             self.position += 1
         if self.position >= len(self.source):
             self.supported = False
