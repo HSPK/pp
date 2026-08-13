@@ -1,4 +1,4 @@
-"""Tests for `pi_coding_agent.core.overflow`, ported from
+"""Tests for `pi_ai.utils.overflow`, ported from
 `packages/ai/test/overflow.test.ts` and extended to cover every provider
 pattern in `packages/ai/src/utils/overflow.ts`.
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 from pi_ai.types import AssistantMessage, Cost, Usage
-from pi_coding_agent.core.overflow import is_context_overflow, is_recoverable_length
+from pi_ai.utils.overflow import is_context_overflow, is_recoverable_length
 
 
 def usage(input: int = 0, output: int = 0, cache_read: int = 0, cache_write: int = 0) -> Usage:

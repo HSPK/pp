@@ -16,6 +16,7 @@ import re
 import pytest
 from pi_coding_agent.modes.interactive.theme.theme import (
     get_language_from_path,
+    get_markdown_theme,
     highlight_code,
     init_theme,
     theme,
@@ -91,3 +92,19 @@ def test_a_style_never_spans_a_newline():
 
 def test_an_unusable_language_does_not_raise():
     assert [_plain(x) for x in highlight_code("x = 1", "definitely-not-a-language")] == ["x = 1"]
+
+
+def test_the_markdown_theme_uses_the_highlighter():
+    """`highlight_code` existed but was never handed to `MarkdownTheme`.
+
+    `Markdown` only highlights a fenced block when `theme.highlight_code` is
+    set, so leaving it at its `None` default made every code block in the
+    transcript render flat, however complete the highlighter itself was.
+    """
+    markdown_theme = get_markdown_theme()
+
+    assert markdown_theme.highlight_code is not None
+
+    lines = markdown_theme.highlight_code("def f():\n    return 1", "python")
+    assert [_plain(line) for line in lines] == ["def f():", "    return 1"]
+    assert theme.fg("syntaxKeyword", "def") in lines[0]

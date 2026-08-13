@@ -3,12 +3,11 @@
 Ported from ``packages/coding-agent/src/modes/interactive/components/tool-execution.ts``.
 
 Renderer hooks are supported: a ``ToolDefinition`` may carry ``render_call`` /
-``render_result`` / ``render_shell`` attributes, and extensions can supply
-them. The *built-in* per-tool renderers (the bespoke read/edit/bash/... views
-in ``core/tools/*.ts``) are not ported yet, so built-in tools currently fall
-back to the generic composition path -- tool name, pretty-printed arguments
-and text output -- which is exactly what the TypeScript version does for any
-tool without renderers.
+``render_result`` / ``render_shell`` attributes, supplied either by the
+built-in per-tool renderers in ``tools/__init__.py`` or by extensions. A tool
+with no renderers falls back to the generic composition path -- tool name,
+pretty-printed arguments and text output -- exactly as the TypeScript version
+does.
 
 Kitty image conversion (``utils/image-convert.ts``) is ported: the Kitty
 graphics protocol only accepts PNG, so non-PNG tool result images are decoded

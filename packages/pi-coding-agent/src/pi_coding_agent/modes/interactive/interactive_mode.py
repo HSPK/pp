@@ -2743,8 +2743,6 @@ class InteractiveMode:
             on_default_project_trust_change=settings.set_default_project_trust,
             on_clear_on_shrink_change=self._set_clear_on_shrink,
             on_show_terminal_progress_change=settings.set_show_terminal_progress,
-            # `switchTuiMode` (live renderer swap) is not ported; persist the
-            # choice so it applies on the next start instead of dropping it.
             on_tui_mode_change=self._set_tui_mode,
             on_fullscreen_exit_output_change=settings.set_fullscreen_exit_output,
             on_fullscreen_scrollbar_change=self._set_fullscreen_scrollbar,
@@ -2836,12 +2834,17 @@ class InteractiveMode:
             self.status_container.clear()
 
     def _set_tui_mode(self, mode: str) -> None:
-        # Port of `onTuiModeChange` (`interactive-mode.ts:4557-4566`): the swap
+        # Port of `onTuiModeChange` (`interactive-mode.ts:4565-4574`): the swap
         # is attempted first and the setting is only persisted if it succeeded.
         if not self.switch_tui_mode(mode):
             self.show_status("Close active overlays before changing TUI mode")
             return
         self.settings_manager.set_tui_mode(mode)
+        # The idle placeholder reserves height for a status indicator that the
+        # new renderer no longer has; leaving it would strand two blank rows.
+        if self.active_status_indicator is None:
+            self.status_container.clear()
+        self.show_status(f"TUI mode: {mode}")
 
     def _set_fullscreen_scrollbar(self, mode: str) -> None:
         self.settings_manager.set_fullscreen_scrollbar(mode)

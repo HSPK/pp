@@ -4,8 +4,8 @@ Ported from ``theme-selector.ts``, ``thinking-selector.ts`` and
 ``show-images-selector.ts`` under
 ``packages/coding-agent/src/modes/interactive/components/``. ``ConfirmSelector``
 covers the Yes/No shape upstream builds on top of ``extension-selector.ts``
-(``showExtensionConfirm``); the extension UI host itself is not ported, but the
-built-in commands that ask for confirmation are.
+(``showExtensionConfirm``), used by the built-in commands that ask for
+confirmation and by ``ExtensionUIContext.confirm``.
 """
 
 from __future__ import annotations

@@ -74,6 +74,7 @@ from .utils.json_parse import (
     parse_streaming_json,
     repair_json,
 )
+from .utils.overflow import is_context_overflow, is_recoverable_length
 from .utils.text import content_text
 from .utils.uuid import uuidv7
 from .utils.validation import (
@@ -144,6 +145,8 @@ __all__ = [
     "create_assistant_message_event_stream",
     "get_supported_thinking_levels",
     "has_api",
+    "is_context_overflow",
+    "is_recoverable_length",
     "models_are_equal",
     "now_ms",
     "parse_json_with_repair",

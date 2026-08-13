@@ -182,6 +182,7 @@ from pi_ai.types import (
     now_ms,
 )
 from pi_ai.utils.abort import AbortController, AbortError, AbortSignal
+from pi_ai.utils.overflow import is_context_overflow, is_recoverable_length
 from pi_ai.utils.retry import RetryCallbacks, RetryPolicy, is_retryable_assistant_error
 from pi_ai.utils.text import content_text
 
@@ -272,7 +273,6 @@ from pi_coding_agent.core.extensions.types import (
 )
 from pi_coding_agent.core.model_resolver import DEFAULT_THINKING_LEVEL, ScopedModel
 from pi_coding_agent.core.model_runtime import ModelRuntime
-from pi_coding_agent.core.overflow import is_context_overflow, is_recoverable_length
 from pi_coding_agent.core.resource_loader import (
     ExtensionResourcePath,
     PromptTemplate,

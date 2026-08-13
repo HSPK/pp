@@ -296,9 +296,10 @@ class Theme:
     ) -> None:
         self.name = name
         self.source_path = source_path
-        # `SourceInfo` (`core/source-info.ts`) is not ported; kept as an
-        # untyped attribute for parity with the TypeScript field, which the
-        # (unported) resource loader assigns after loading a theme file.
+        # `SourceInfo` (`core/source-info.ts`) is kept as an untyped attribute
+        # for parity with the TypeScript field. Typing it would import
+        # `core.source_info` here purely for an annotation, and nothing assigns
+        # it yet: this port's resource loader does not load themes.
         self.source_info = source_info
         self._mode: ColorMode = mode
 
@@ -997,10 +998,8 @@ def get_theme_export_colors(
 def get_markdown_theme():
     """Build a `pi_tui.MarkdownTheme` from the current global theme.
 
-    `highlightCode` is not ported (see the module docstring), so
-    `highlight_code` is left at its `MarkdownTheme` default (`None`) and
-    fenced code blocks render unhighlighted. `code_block_indent` is filled in
-    by the interactive mode from the `codeBlockIndent` setting.
+    `code_block_indent` is filled in by the interactive mode from the
+    `codeBlockIndent` setting.
     """
     from pi_tui import MarkdownTheme
 
@@ -1019,6 +1018,7 @@ def get_markdown_theme():
         italic=lambda text: theme.italic(text),
         underline=lambda text: theme.underline(text),
         strikethrough=lambda text: f"\x1b[9m{text}\x1b[29m",
+        highlight_code=highlight_code,
     )
 
 
