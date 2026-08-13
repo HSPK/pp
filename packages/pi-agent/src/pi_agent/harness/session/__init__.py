@@ -5,10 +5,8 @@ Entry/Record model and query types (`types.py`), the session context
 projection (`context.py`), the in-memory backend (`memory.py`), the `Session`
 facade (`session.py`), and the JSONL v4 backend (`jsonl/`).
 
-`search.py` is additionally re-exported here for convenience even though the
-upstream `session/index.ts` does not include it (upstream `search.ts` is
-re-exported from the package's top-level `index.ts` instead); this port has
-no equivalent top-level harness package barrel yet, so it is included here.
+Search used to live here too. Upstream moved it to its own top-level module in
+`refactor: search` (#7797); this port follows, so it is now `pi_agent.search`.
 """
 
 from __future__ import annotations
@@ -43,13 +41,6 @@ from .jsonl import (
     JsonlV4Header,
 )
 from .memory import InMemorySessionRepo, InMemorySessionStorage
-from .search import (
-    ScanningSessionSearch,
-    SessionSearch,
-    SessionSearchHit,
-    SessionSearchOptions,
-    create_scanning_session_search,
-)
 from .session import Session, assert_json_serializable
 from .state import SessionMutation, SessionState
 from .types import (
@@ -170,7 +161,6 @@ __all__ = [
     "QueueEnqueuedRecord",
     "RecordQuery",
     "RunIntent",
-    "ScanningSessionSearch",
     "Session",
     "SessionContext",
     "SessionContextBuildOptions",
@@ -182,9 +172,6 @@ __all__ = [
     "SessionMetadata",
     "SessionMutation",
     "SessionRepo",
-    "SessionSearch",
-    "SessionSearchHit",
-    "SessionSearchOptions",
     "SessionState",
     "SessionStats",
     "SessionStopReason",
@@ -201,7 +188,6 @@ __all__ = [
     "build_session_context",
     "create_branch_summary_message",
     "create_compaction_summary_message",
-    "create_scanning_session_search",
     "default_context_entry_transform",
     "session_entry_to_context_messages",
 ]
