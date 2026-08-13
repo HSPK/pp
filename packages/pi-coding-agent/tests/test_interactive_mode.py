@@ -1738,3 +1738,97 @@ def test_switch_tui_mode_is_a_no_op_for_the_current_mode(tmp_path: Path, monkeyp
             await mode.shutdown()
 
     _run(scenario(), timeout=30)
+
+
+# --------------------------------------------------------------------------
+# vertical spacing above the editor
+# --------------------------------------------------------------------------
+
+
+def _rendered_rows(container: Any, width: int = 80) -> list[str]:
+    rows: list[str] = []
+    for child in container.children:
+        rows.extend(child.render(width))
+    return rows
+
+
+def _plain(rows: list[str]) -> list[str]:
+    return [_ANSI_RE.sub("", row).rstrip() for row in rows]
+
+
+def test_idle_status_does_not_reserve_rows_before_any_status_indicator(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """`interactive-mode.ts` mounts `idleStatus` only from `clearStatusIndicator`.
+
+    Reserving the two placeholder rows at startup put a permanent gap between
+    the last response and the prompt that the TypeScript UI does not have.
+    """
+
+    async def scenario() -> None:
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch)
+        try:
+            await mode.init()
+
+            assert _rendered_rows(mode.status_container) == []
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)
+
+
+def test_idle_status_reserves_rows_once_an_indicator_has_been_cleared(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The other half of `clearStatusIndicator`: keep the height it was using."""
+
+    async def scenario() -> None:
+        from pi_coding_agent.modes.interactive.components.status_indicator import WorkingStatusIndicator
+
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch)
+        try:
+            await mode.init()
+            mode.ui.set_clear_on_shrink(True)
+
+            mode._show_status_indicator(WorkingStatusIndicator(mode.ui, lambda: None))
+            mode._clear_status_indicator()
+
+            assert _rendered_rows(mode.status_container) == [" " * 80] * 2
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)
+
+
+def test_a_user_message_is_separated_from_the_message_above_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Port of the `chatContainer.children.length > 0` guard in `addMessageToChat`."""
+
+    async def scenario() -> None:
+        from pi_ai.types import AssistantMessage, TextContent, UserMessage
+
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch)
+        try:
+            await mode.init()
+
+            mode._add_message_to_chat(UserMessage(content="first"))
+            # The transcript opens flush: no leading blank row before the first
+            # message's own box padding.
+            assert _plain(_rendered_rows(mode.chat_container)) == ["", " first", ""]
+
+            mode._add_message_to_chat(AssistantMessage(content=[TextContent(text="reply")]))
+            mode._add_message_to_chat(UserMessage(content="second"))
+
+            assert _plain(_rendered_rows(mode.chat_container)) == [
+                "",
+                " first",
+                "",
+                # assistant component's own leading spacer
+                "",
+                " reply",
+                # separator before the next user message
+                "",
+                # user message box padding
+                "",
+                " second",
+                "",
+            ]
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)

@@ -549,7 +549,6 @@ class InteractiveMode:
         # landed during that await already rebound and subscribed, so resuming
         # here would attach a second listener to the same session.
         if self.session is not startup_session:
-            self.status_container.add_child(self.idle_status)
             self.footer_data_provider.on_branch_change(self.ui.request_render)
             self.footer_data_provider.start_watching()
             self.ui.request_render()
@@ -560,7 +559,6 @@ class InteractiveMode:
         self._render_initial_messages()
         self._update_terminal_title()
         self._update_editor_border_color()
-        self.status_container.add_child(self.idle_status)
 
         self.footer_data_provider.on_branch_change(self.ui.request_render)
         self.footer_data_provider.start_watching()
@@ -1936,6 +1934,10 @@ class InteractiveMode:
         if role == "user":
             text = self._get_user_message_text(message)
             if text:
+                # A user message is separated from whatever precedes it by one
+                # blank line, but never opens the transcript with one.
+                if self.chat_container.children:
+                    self.chat_container.add_child(Spacer(1))
                 self.chat_container.add_child(UserMessageComponent(text, self._markdown_theme(), self.output_pad))
         elif role == "assistant":
             component = AssistantMessageComponent(
