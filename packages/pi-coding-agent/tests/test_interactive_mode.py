@@ -1438,6 +1438,9 @@ def test_tree_navigation_aborts_an_in_flight_response_first(tmp_path: Path, monk
         mode, _terminal = await _make_mode(tmp_path, monkeypatch, script=["hi"])
         try:
             await mode.init()
+            # The summarize prompt is a separate concern; this case is about
+            # aborting the in-flight response.
+            mode.settings_manager.apply_overrides({"branchSummary": {"skipPrompt": True}})
             await mode.session.prompt("question")
             await asyncio.sleep(0.05)
             entry_id = mode.session_manager.get_branch()[0].id
@@ -1950,6 +1953,155 @@ def test_an_extension_can_draw_a_widget_through_the_ui_context(tmp_path: Path, m
             await mode.init()
 
             assert _plain(_rendered_rows(mode.widget_container_above)) == ["", " from an extension"]
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)
+
+
+# --------------------------------------------------------------------------
+# branch summarization on tree navigation
+# --------------------------------------------------------------------------
+
+
+async def _answer_summary_prompt(mode: Any, answer: str | None) -> list[str]:
+    """Replace the selector with a scripted answer, recording what it offered."""
+    seen: list[str] = []
+
+    async def show_extension_selector(title: str, options: list[str], timeout: int | None = None) -> str | None:
+        seen.append(title)
+        seen.extend(options)
+        return answer
+
+    mode.show_extension_selector = show_extension_selector
+    return seen
+
+
+def test_tree_navigation_offers_to_summarize_the_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """`navigate_tree` accepts `summarize`, but nothing ever asked the user for it.
+
+    The setting that turns the question off (`branchSummary.skipPrompt`) had no
+    reader either, which is what made the gap visible.
+    """
+
+    async def scenario() -> None:
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch, script=["hi"])
+        try:
+            await mode.init()
+            await mode.session.prompt("question")
+            entry_id = mode.session_manager.get_branch()[0].id
+            seen = await _answer_summary_prompt(mode, "Summarize")
+
+            captured: dict[str, Any] = {}
+            original = mode.session.navigate_tree
+
+            async def navigate_tree(target_id: str, **kwargs: Any) -> Any:
+                captured.update(kwargs)
+                return await original(target_id)
+
+            monkeypatch.setattr(mode.session, "navigate_tree", navigate_tree)
+
+            await mode._navigate_tree(entry_id)
+
+            assert seen[0] == "Summarize branch?"
+            assert seen[1:] == ["No summary", "Summarize", "Summarize with custom prompt"]
+            assert captured["summarize"] is True
+            assert captured["custom_instructions"] is None
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)
+
+
+def test_declining_the_summary_navigates_without_summarizing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    async def scenario() -> None:
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch, script=["hi"])
+        try:
+            await mode.init()
+            await mode.session.prompt("question")
+            entry_id = mode.session_manager.get_branch()[0].id
+            await _answer_summary_prompt(mode, "No summary")
+
+            captured: dict[str, Any] = {}
+            original = mode.session.navigate_tree
+
+            async def navigate_tree(target_id: str, **kwargs: Any) -> Any:
+                captured.update(kwargs)
+                return await original(target_id)
+
+            monkeypatch.setattr(mode.session, "navigate_tree", navigate_tree)
+
+            await mode._navigate_tree(entry_id)
+
+            assert captured["summarize"] is False
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)
+
+
+def test_escaping_the_summary_prompt_returns_to_the_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Escape must not navigate: the choice was never made."""
+
+    async def scenario() -> None:
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch, script=["hi"])
+        try:
+            await mode.init()
+            await mode.session.prompt("question")
+            entry_id = mode.session_manager.get_branch()[0].id
+            await _answer_summary_prompt(mode, None)
+
+            navigated: list[str] = []
+
+            async def navigate_tree(target_id: str, **kwargs: Any) -> Any:
+                navigated.append(target_id)
+                raise AssertionError("must not navigate after escape")
+
+            monkeypatch.setattr(mode.session, "navigate_tree", navigate_tree)
+            reopened: list[str | None] = []
+            monkeypatch.setattr(mode, "show_tree_selector", lambda selected=None: reopened.append(selected))
+
+            await mode._navigate_tree(entry_id)
+
+            assert navigated == []
+            # The tree reopens on the entry the user was looking at.
+            assert reopened == [entry_id]
+        finally:
+            await mode.shutdown()
+
+    _run(scenario(), timeout=30)
+
+
+def test_skip_prompt_setting_navigates_without_asking(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    async def scenario() -> None:
+        mode, _terminal = await _make_mode(tmp_path, monkeypatch, script=["hi"])
+        try:
+            await mode.init()
+            mode.settings_manager.apply_overrides({"branchSummary": {"skipPrompt": True}})
+            await mode.session.prompt("question")
+            entry_id = mode.session_manager.get_branch()[0].id
+
+            asked: list[str] = []
+
+            async def show_extension_selector(title: str, options: list[str], timeout: int | None = None):
+                asked.append(title)
+                return "Summarize"
+
+            mode.show_extension_selector = show_extension_selector
+
+            captured: dict[str, Any] = {}
+            original = mode.session.navigate_tree
+
+            async def navigate_tree(target_id: str, **kwargs: Any) -> Any:
+                captured.update(kwargs)
+                return await original(target_id)
+
+            monkeypatch.setattr(mode.session, "navigate_tree", navigate_tree)
+
+            await mode._navigate_tree(entry_id)
+
+            assert asked == []
+            assert captured["summarize"] is False
         finally:
             await mode.shutdown()
 

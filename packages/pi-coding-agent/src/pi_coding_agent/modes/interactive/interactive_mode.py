@@ -2910,7 +2910,7 @@ class InteractiveMode:
 
         self._show_selector(TrustSelectorComponent(cwd, store.get_entry(cwd), True, select, self._hide_selector))
 
-    def show_tree_selector(self) -> None:
+    def show_tree_selector(self, initial_selected_id: str | None = None) -> None:
         tree = self.session_manager.get_tree()
         if not tree:
             self.show_status("Session tree is empty")
@@ -2930,24 +2930,69 @@ class InteractiveMode:
             select,
             self._hide_selector,
             label_change,
+            initial_selected_id=initial_selected_id,
             initial_filter_mode=self.settings_manager.get_tree_filter_mode(),
         )
         selector.on_copy = self._copy_to_clipboard
         self._show_selector(selector)
 
     async def _navigate_tree(self, entry_id: str) -> None:
+        # Ask whether to summarize the branch being left behind, unless the
+        # user has opted out of the question. Escape at the picker returns to
+        # the tree rather than navigating, so the choice is never made by
+        # accident.
+        wants_summary = False
+        custom_instructions: str | None = None
+        if not self.settings_manager.get_branch_summary_skip_prompt():
+            while True:
+                choice = await self.show_extension_selector(
+                    "Summarize branch?",
+                    ["No summary", "Summarize", "Summarize with custom prompt"],
+                )
+                if choice is None:
+                    self.show_tree_selector(entry_id)
+                    return
+                wants_summary = choice != "No summary"
+                if choice == "Summarize with custom prompt":
+                    custom_instructions = await self.show_extension_input("Custom summarization instructions")
+                    if custom_instructions is None:
+                        continue
+                break
+
         # The user committed to navigating: stop the active response first, or
         # `navigate_tree` rejects with "Wait for the current response to finish".
         if self.session.is_streaming:
             self._restore_queued_messages_to_editor()
             await self.session.abort()
+
+        original_on_escape = self.default_editor.on_escape
+        showing_summary_indicator = False
+        if wants_summary:
+            # Summarization can take a while, so escape has to reach it.
+            self.default_editor.on_escape = self.session.abort_branch_summary
+            self.chat_container.add_child(Spacer(1))
+            self._show_status_indicator(BranchSummaryStatusIndicator(self.ui))
+            showing_summary_indicator = True
+            self.ui.request_render()
+
         try:
-            result = await self.session.navigate_tree(entry_id)
+            result = await self.session.navigate_tree(
+                entry_id,
+                summarize=wants_summary,
+                custom_instructions=custom_instructions,
+            )
         except Exception as error:
             self.show_error(str(error))
             return
+        finally:
+            if showing_summary_indicator:
+                self._clear_status_indicator("branchSummary")
+            self.default_editor.on_escape = original_on_escape
+
         if result.aborted:
+            # Summarization was cancelled, not the navigation: offer the tree again.
             self.show_status("Branch summarization cancelled")
+            self.show_tree_selector(entry_id)
             return
         if result.cancelled:
             self.show_status("Navigation cancelled")

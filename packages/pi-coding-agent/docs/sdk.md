@@ -14,7 +14,13 @@ The Python SDK provides programmatic access to pi's agent session runtime. Use i
 
 The main SDK entry point is [`src/pi_coding_agent/core/sdk.py`](../src/pi_coding_agent/core/sdk.py): `create_agent_session()` and `CreateAgentSessionOptions`.
 
-See [examples/sdk/](../examples/sdk/) for sibling examples as they are ported.
+See [examples/sdk/](../examples/sdk/) for runnable sibling examples:
+
+- [`01_minimal.py`](../examples/sdk/01_minimal.py) — all defaults.
+- [`02_custom_model.py`](../examples/sdk/02_custom_model.py) — selecting a model and thinking level.
+- [`03_custom_prompt.py`](../examples/sdk/03_custom_prompt.py) — replacing or appending to the system prompt.
+
+More are ported as the surfaces they need land.
 
 ## Quick Start
 
