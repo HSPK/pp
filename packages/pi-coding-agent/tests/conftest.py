@@ -4,6 +4,28 @@ from __future__ import annotations
 
 import pytest
 from pi_coding_agent.core import output_guard
+from pi_tui.terminal_image import TerminalCapabilities, reset_capabilities_cache, set_capabilities
+
+
+@pytest.fixture(autouse=True)
+def _pin_terminal_capabilities() -> object:
+    """Pin terminal capabilities so results do not depend on who runs the tests.
+
+    ``get_capabilities()`` sniffs the ambient environment once and caches it,
+    so renderers behave differently depending on the terminal the suite was
+    launched from. ``TERM_PROGRAM=vscode`` reports ``hyperlinks=True``, which
+    makes the path renderers wrap paths in OSC 8 escapes; assertions looking
+    for a bare path then fail in VS Code's integrated terminal while passing
+    in CI, which sets no ``TERM_PROGRAM``.
+
+    Pinning the least-capable terminal keeps the rendered output plain, which
+    is what these assertions are written against. Tests that care about a
+    specific capability still call ``set_capabilities`` themselves; this only
+    establishes the default and clears the cache afterwards.
+    """
+    set_capabilities(TerminalCapabilities(images=None, true_color=False, hyperlinks=False))
+    yield
+    reset_capabilities_cache()
 
 
 @pytest.fixture(autouse=True)
