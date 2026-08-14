@@ -951,11 +951,11 @@ def register(pi) -> None:
 
 ### pi.sendMessage(message, options?)
 
-Python name: `pi.send_message(...)`. The method exists on `ExtensionAPI`, but it only works when the host loaded extensions with `ExtensionRuntimeActions.send_message`. The stock CLI extension discovery currently does not bind that action, so it is a no-op there.
+Python name: `pi.send_message(...)`. Bound by the CLI, so it reaches the session. A custom host that loads extensions itself must supply `ExtensionRuntimeActions.send_message`, or the call is a no-op.
 
 ### pi.sendUserMessage(content, options?)
 
-Python name: `pi.send_user_message(...)`. Like `send_message`, it requires host-provided `ExtensionRuntimeActions.send_user_message`. Example tests and custom harnesses bind it; stock CLI discovery does not.
+Python name: `pi.send_user_message(...)`. Bound by the CLI, like `send_message`. Delivery mode is either a keyword (`deliver_as="followUp"`) or TypeScript's options dict (`{"deliverAs": "followUp"}`).
 
 ```python
 def request_follow_up(pi) -> None:
@@ -964,15 +964,15 @@ def request_follow_up(pi) -> None:
 
 ### pi.appendEntry(customType, data?)
 
-Python name: `pi.append_entry(custom_type, data=None)`. It requires host-provided `ExtensionRuntimeActions.append_entry`; stock CLI discovery does not bind it.
+Python name: `pi.append_entry(custom_type, data=None)`. Bound by the CLI.
 
 ### pi.setSessionName(name)
 
-Python name: `pi.set_session_name(name)`. It requires host-provided `ExtensionRuntimeActions.set_session_name`; stock CLI discovery does not bind it.
+Python name: `pi.set_session_name(name)`. Bound by the CLI.
 
 ### pi.getSessionName()
 
-Python name: `pi.get_session_name()`. It requires host-provided `ExtensionRuntimeActions.get_session_name`; stock CLI discovery returns `None`.
+Python name: `pi.get_session_name()`. Bound by the CLI; returns `None` before a session exists.
 
 ### pi.setLabel(entryId, label)
 
@@ -1044,7 +1044,7 @@ Not available on `ExtensionAPI` in the Python port. Use `ctx.thinking_level` for
 
 ### pi.events
 
-`pi.events` exists, but it requires an `EventBus` supplied through `ExtensionRuntimeActions.event_bus`. Without one, `emit` is a no-op and `on` returns an inert unsubscribe.
+`pi.events` requires an `EventBus` supplied through `ExtensionRuntimeActions.event_bus`. The CLI does not create one, so `emit` is a no-op and `on` returns an inert unsubscribe there; a custom host can pass a bus.
 
 ```python
 def pi_extension(pi) -> None:
@@ -1311,7 +1311,7 @@ When no custom renderer exists, the Python port uses generic tool result renderi
 
 ### Dynamic Tool Loading
 
-Dynamic tool loading through `pi.set_active_tools()` is only effective when the host binds active-tool runtime actions. The stock CLI does not bind them during extension discovery. Custom harnesses can bind them through `ExtensionRuntimeActions`.
+Dynamic tool loading through `pi.set_active_tools()` is bound by the CLI. A custom host that loads extensions itself must supply the action through `ExtensionRuntimeActions`.
 
 #### Models with native deferred loading
 
@@ -1456,7 +1456,7 @@ All Python examples in [examples/extensions/](../examples/extensions/).
 
 | Example | Description | Key APIs |
 |---------|-------------|----------|
-| `git_merge_and_resolve.py` | Fetch and merge upstream after agent turns, then send conflict follow-up messages in hosts that bind `send_user_message` | `on("agent_end")`, `exec`, `send_user_message` |
+| `git_merge_and_resolve.py` | Fetch and merge upstream after agent turns, then send conflict follow-up messages | `on("agent_end")`, `exec`, `send_user_message` |
 | `input_transform_streaming.py` | Transform input unless it is mid-stream steering | `on("input")`, `InputEventResult`, `streaming_behavior`, `exec` |
 | `trigger_compact.py` | Trigger compaction by threshold or slash command | `on("turn_end")`, `register_command`, `CompactOptions`, `ctx.compact()` |
 | `plan_mode/utils.py` | Pure plan-mode helpers only | No extension entry point; full plan-mode UI/shortcut extension is not ported |
