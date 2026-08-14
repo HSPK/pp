@@ -566,6 +566,7 @@ class InteractiveMode:
         # `ExtensionUIContext` protocol keeps; the rest is a documented omission.
         startup_session = self.session
         startup_session.extension_runner.set_ui_context(InteractiveExtensionUIContext(self), "tui")
+        startup_session.set_extension_shutdown_handler(self._handle_extension_shutdown)
         await startup_session.bind_extensions()
 
         # TS's `if (this.session !== session) return;`: a replacement that
@@ -3059,6 +3060,7 @@ class InteractiveMode:
         # The replacement session carries its own runner, so the UI host has to
         # be installed again or its extensions would get the null context.
         session.extension_runner.set_ui_context(InteractiveExtensionUIContext(self), "tui")
+        session.set_extension_shutdown_handler(self._handle_extension_shutdown)
         await session.bind_extensions()
         if self.session is not session:
             return
@@ -3206,6 +3208,18 @@ class InteractiveMode:
             with contextlib.suppress(Exception):
                 loop.remove_signal_handler(sig)
         self._signal_cleanup = []
+
+    def _handle_extension_shutdown(self) -> None:
+        """`ctx.shutdown()`: leave after the current turn, not mid-response.
+
+        Port of the `shutdownHandler` the TypeScript interactive mode passes to
+        `bindExtensions`. Shutting down while streaming would drop the reply
+        the user is watching, so a busy session only records the request; the
+        prompt loop honours it once idle.
+        """
+        self.shutdown_requested = True
+        if self.session.is_idle:
+            spawn(self.shutdown())
 
     async def shutdown(self, from_signal: bool = False) -> None:
         if self.is_shutting_down:

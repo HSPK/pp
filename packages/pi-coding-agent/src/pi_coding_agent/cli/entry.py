@@ -58,7 +58,7 @@ from pi_coding_agent.core.agent_session_runtime import (
     create_agent_session_runtime,
 )
 from pi_coding_agent.core.config import VERSION, get_agent_dir
-from pi_coding_agent.core.extensions import discover_and_load_extensions
+from pi_coding_agent.core.extensions import SessionRuntimeActions, discover_and_load_extensions
 from pi_coding_agent.core.model_resolver import resolve_model_scope
 from pi_coding_agent.core.model_runtime import ModelRuntime
 from pi_coding_agent.core.output_guard import restore_stdout, take_over_stdout
@@ -381,11 +381,18 @@ async def build_session_runtime(
     # hand them to the session -- without this, `--extension` and
     # `--no-extensions` parse but do nothing and a project's
     # `.pi/extensions/*.py` never loads in the real binary.
+    # `pi.*` runtime actions are baked into each extension's `pi` object as the
+    # file loads, which is before any session exists, so they are bound to a
+    # holder that `create_runtime` fills in below. Without this the CLI loads
+    # extensions with the default no-ops and `pi.send_user_message()` and
+    # friends silently do nothing.
+    runtime_actions = SessionRuntimeActions()
     extensions_result = await discover_and_load_extensions(
         parsed.extensions or [],
         cwd,
         project_trusted=project_trusted,
         agent_dir=agent_dir,
+        actions=runtime_actions.actions,
         no_extensions=bool(parsed.no_extensions),
     )
     if extensions_result.errors:
@@ -404,7 +411,7 @@ async def build_session_runtime(
         raise SystemExit(1)
 
     async def create_runtime(**kwargs: Any) -> Any:
-        return await create_agent_session(
+        result = await create_agent_session(
             CreateAgentSessionOptions(
                 cwd=kwargs.get("cwd", cwd),
                 agent_dir=kwargs.get("agent_dir", agent_dir),
@@ -420,6 +427,10 @@ async def build_session_runtime(
                 extensions=extensions_result.extensions,
             )
         )
+        # Re-bound on every replacement (`/new`, `/import`, `/clone`), so the
+        # actions never point at a disposed session.
+        runtime_actions.bind(result.session)
+        return result
 
     return await create_agent_session_runtime(
         create_runtime, cwd=cwd, agent_dir=agent_dir, session_manager=session_manager

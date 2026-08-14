@@ -69,12 +69,14 @@ files on the same flag.
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import os
 import sys
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from pi_coding_agent.core.config import CONFIG_DIR_NAME, get_agent_dir
 from pi_coding_agent.core.event_bus import EventBus, EventBusHandler
@@ -298,6 +300,113 @@ class ExtensionRuntimeActions:
 
 def _default_runtime_actions() -> ExtensionRuntimeActions:
     return ExtensionRuntimeActions()
+
+
+class SessionRuntimeActions:
+    """`pi.*` runtime actions bound to whichever session is current.
+
+    The actions are baked into each extension's `pi` object when the file is
+    loaded, but extensions load *before* the session exists, and the session is
+    replaced on `/new`, `/import` and `/clone`. So the bindings close over this
+    holder rather than a session, and the host calls :meth:`bind` once the
+    session is available and again after every replacement.
+
+    Without it the CLI loads extensions with the default no-op actions, so
+    `pi.send_user_message()`, `pi.send_message()`, `pi.append_entry()`,
+    `pi.set_session_name()` and `pi.set_active_tools()` silently do nothing --
+    the extension runs, reports no error, and has no effect.
+    """
+
+    def __init__(self, event_bus: EventBus | None = None) -> None:
+        self._session: Any = None
+        self._event_bus = event_bus
+
+    def bind(self, session: Any) -> None:
+        self._session = session
+
+    @property
+    def actions(self) -> ExtensionRuntimeActions:
+        return ExtensionRuntimeActions(
+            send_message=self._send_message,
+            send_user_message=self._send_user_message,
+            append_entry=self._append_entry,
+            set_session_name=self._set_session_name,
+            get_session_name=self._get_session_name,
+            set_active_tools=self._set_active_tools,
+            get_active_tools=self._get_active_tools,
+            event_bus=self._event_bus,
+        )
+
+    # -- individual actions -------------------------------------------------
+
+    def _spawn(self, coro: Awaitable[None]) -> None:
+        # Fire-and-forget, matching TypeScript's `void (async () => ...)()`.
+        # The task is kept referenced until it settles so it is not collected
+        # mid-flight.
+        task = asyncio.ensure_future(coro)
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_TASKS.discard)
+
+    def _send_message(self, message: Any, options: Any = None, **kwargs: Any) -> None:
+        session = self._session
+        if session is None:
+            return
+        deliver_as = kwargs.get("deliver_as")
+        trigger_turn = bool(kwargs.get("trigger_turn", False))
+        if isinstance(options, dict):
+            # TypeScript spells the options camelCase; Python extensions in
+            # this port use keyword arguments. Accept both.
+            deliver_as = options.get("deliverAs", options.get("deliver_as", deliver_as))
+            trigger_turn = bool(options.get("triggerTurn", options.get("trigger_turn", trigger_turn)))
+        is_dict = isinstance(message, dict)
+        self._spawn(
+            session.send_custom_message(
+                message["customType"] if is_dict else message.custom_type,
+                message["content"] if is_dict else message.content,
+                message["display"] if is_dict else message.display,
+                message.get("details") if is_dict else getattr(message, "details", None),
+                trigger_turn=trigger_turn,
+                deliver_as=deliver_as,
+            )
+        )
+
+    def _send_user_message(self, content: Any, options: Any = None, **kwargs: Any) -> None:
+        session = self._session
+        if session is None:
+            return
+        deliver_as = kwargs.get("deliver_as")
+        if isinstance(options, dict):
+            deliver_as = options.get("deliverAs", options.get("deliver_as", deliver_as))
+        self._spawn(session.send_user_message(content, deliver_as=deliver_as))
+
+    def _append_entry(self, custom_type: str, data: object = None) -> None:
+        session = self._session
+        if session is None:
+            return
+        session.session_manager.append_custom_entry(custom_type, data)
+
+    def _set_session_name(self, name: str) -> None:
+        session = self._session
+        if session is None:
+            return
+        session.set_session_name(name)
+
+    def _get_session_name(self) -> str | None:
+        session = self._session
+        return session.session_name if session is not None else None
+
+    def _set_active_tools(self, tool_names: list[str]) -> None:
+        session = self._session
+        if session is None:
+            return
+        session.set_active_tools_by_name(tool_names)
+
+    def _get_active_tools(self) -> list[str]:
+        session = self._session
+        return session.get_active_tool_names() if session is not None else []
+
+
+_BACKGROUND_TASKS: set[asyncio.Task[Any]] = set()
 
 
 def _is_extension_file(name: str) -> bool:

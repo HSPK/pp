@@ -50,6 +50,9 @@ class _BindableSession:
         self.bind_future: asyncio.Future[None] = asyncio.get_event_loop().create_future()
         self.extension_runner = _FakeExtensionRunner()
 
+    def set_extension_shutdown_handler(self, handler: Any) -> None:
+        self.shutdown_handler = handler
+
     async def bind_extensions(self) -> None:
         await self.bind_future
 
@@ -73,6 +76,8 @@ class _RebindContext:
     def _apply_runtime_settings(self) -> None: ...
 
     def _rebuild_chat_from_session(self) -> None: ...
+
+    def _handle_extension_shutdown(self) -> None: ...
 
     def _subscribe_to_agent(self) -> None:
         self.subscribe_calls += 1
