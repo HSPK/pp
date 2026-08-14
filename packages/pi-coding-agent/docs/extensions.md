@@ -1046,7 +1046,7 @@ Not available on `ExtensionAPI` in the Python port. Use `ctx.thinking_level` for
 
 ### pi.events
 
-`pi.events` requires an `EventBus` supplied through `ExtensionRuntimeActions.event_bus`. The CLI does not create one, so `emit` is a no-op and `on` returns an inert unsubscribe there; a custom host can pass a bus.
+`pi.events` works out of the box: a bus is created when the host supplies none, so extensions loaded together can coordinate through it. A host that wants to own the bus (to bridge it elsewhere, or to clear it) passes one as `ExtensionRuntimeActions.event_bus`.
 
 ```python
 def pi_extension(pi) -> None:

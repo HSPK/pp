@@ -79,7 +79,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pi_coding_agent.core.config import CONFIG_DIR_NAME, get_agent_dir
-from pi_coding_agent.core.event_bus import EventBus, EventBusHandler
+from pi_coding_agent.core.event_bus import EventBus, EventBusHandler, create_event_bus
 from pi_coding_agent.core.exec import ExecOptions, ExecResult, exec_command
 from pi_coding_agent.core.extensions.types import (
     Extension,
@@ -319,7 +319,11 @@ class SessionRuntimeActions:
 
     def __init__(self, event_bus: EventBus | None = None) -> None:
         self._session: Any = None
-        self._event_bus = event_bus
+        # Upstream resolves this with `eventBus ?? createEventBus()`, so
+        # `pi.events` always works. Leaving it `None` would make every
+        # `emit`/`on` an inert no-op in the shipped CLI, which is a silent
+        # failure for any extension that coordinates through the bus.
+        self._event_bus = event_bus if event_bus is not None else create_event_bus()
 
     def bind(self, session: Any) -> None:
         self._session = session
