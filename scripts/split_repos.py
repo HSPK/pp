@@ -331,9 +331,19 @@ def split(out_root: Path, only: set[str] | None) -> list[tuple[str, str, Path]]:
             raise SystemExit(f"missing package directory: {package_dir}")
 
         target = out_root / repo
-        if target.exists():
-            shutil.rmtree(target)
-        target.mkdir(parents=True)
+        target.mkdir(parents=True, exist_ok=True)
+
+        # Replace only what this script generates. A plain `rmtree(target)`
+        # would take `.git` and `.venv` with it, which matters as soon as
+        # these directories are real checkouts being regenerated in place.
+        for entry in ("src", "tests", "docs", "examples", "scripts", ".github"):
+            existing = target / entry
+            if existing.is_dir():
+                shutil.rmtree(existing)
+        for entry in ("pyproject.toml", "README.md", "LICENSE", ".gitignore"):
+            existing = target / entry
+            if existing.exists():
+                existing.unlink()
 
         for entry in ("src", "tests", "docs", "examples", "scripts"):
             source = package_dir / entry
@@ -346,7 +356,7 @@ def split(out_root: Path, only: set[str] | None) -> list[tuple[str, str, Path]]:
         (target / ".gitignore").write_text(GITIGNORE, encoding="utf-8")
 
         workflows = target / ".github" / "workflows"
-        workflows.mkdir(parents=True)
+        workflows.mkdir(parents=True, exist_ok=True)
         (workflows / "ci.yml").write_text(CI_YML, encoding="utf-8")
         (workflows / "release.yml").write_text(RELEASE_YML.format(dist=dist), encoding="utf-8")
 

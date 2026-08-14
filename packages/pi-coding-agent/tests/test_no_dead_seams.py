@@ -235,9 +235,23 @@ def test_every_extension_event_is_constructed_somewhere() -> None:
             module = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
+
+        # Several of these names collide with `pi_agent`'s own events, so this
+        # package imports them aliased (`AgentStartEvent as ExtAgentStartEvent`)
+        # and constructs the alias. Matching on the written name alone would
+        # miss every one -- and in a monorepo checkout it *passed anyway*,
+        # because `pi_agent`'s unrelated same-named classes were in scope.
+        aliases: dict[str, str] = {}
+        for node in ast.walk(module):
+            if isinstance(node, ast.ImportFrom | ast.Import):
+                for alias in node.names:
+                    if alias.asname:
+                        aliases[alias.asname] = alias.name.rsplit(".", 1)[-1]
+
         for node in ast.walk(module):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                constructed.add(node.func.id)
+                name = node.func.id
+                constructed.add(aliases.get(name, name))
 
     never = sorted(name for name in events if name not in constructed)
     assert never == [], (
