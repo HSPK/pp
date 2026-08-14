@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -43,7 +44,10 @@ DEV_GROUP = """dev = [
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
     "pytest-xdist>=3.6",
-    "ruff>=0.8",
+    # Pinned, not floored: `release.yml` gates publishing on `ruff check`, so a
+    # new ruff release introducing a rule would block every package's release
+    # for a reason unrelated to the release. Bump it deliberately instead.
+    "ruff==0.16.3",
     "mypy>=1.13",
 ]
 """
@@ -90,6 +94,7 @@ ignore_missing_imports = true
 """
 
 GITIGNORE = """__pycache__/
+uv.lock
 *.py[cod]
 .venv/
 .pytest_cache/
@@ -365,6 +370,20 @@ def split(out_root: Path, only: set[str] | None) -> list[tuple[str, str, Path]]:
         assert parsed["project"]["name"] == dist, f"{repo}: expected {dist}, got {parsed['project']['name']}"
 
         created.append((repo, dist, target))
+
+    # Import *sections* depend on which packages are first-party, and that
+    # changes with the layout: inside the monorepo every `pi_*` package is
+    # first-party, while in a single-package repository only its own is and
+    # the siblings become third-party. So the sorted order that is correct
+    # here is not the one committed in the monorepo, and CI's
+    # `ruff check`/`ruff format --check` would fail on generated code.
+    for _repo, _dist, target in created:
+        for command in (["ruff", "check", "--fix", "--quiet", "."], ["ruff", "format", "--quiet", "."]):
+            result = subprocess.run(command, cwd=target, capture_output=True, text=True, check=False)
+            # `ruff check --fix` exits non-zero when it leaves unfixable
+            # findings; those are real and must not be hidden.
+            if result.returncode != 0 and command[1] == "format":
+                raise SystemExit(f"{target}: {' '.join(command)} failed\n{result.stderr}")
     return created
 
 
