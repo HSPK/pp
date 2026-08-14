@@ -9,6 +9,7 @@ default: `pi.send_user_message()` ran, reported nothing, and did nothing.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -225,3 +226,36 @@ async def test_the_keyword_form_the_examples_use_works() -> None:
 
     assert session.user_messages == [("text", "followUp")]
     assert session.custom_messages == [("s", "c", True, "steer")]
+
+
+# --------------------------------------------------------------------------
+# ctx.shutdown()
+# --------------------------------------------------------------------------
+
+
+async def test_ctx_shutdown_is_a_no_op_without_a_registered_handler() -> None:
+    """A session cannot know what "shut down" means for its host."""
+    from pi_coding_agent.core.extensions.runner import ExtensionRunner
+
+    runner = ExtensionRunner([], cwd=".")
+    # No `bind_core`, so nothing is wired: the call must not raise.
+    context = runner.create_context()
+    context.shutdown()
+
+
+async def test_ctx_shutdown_calls_the_registered_handler(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "suite"))
+    from harness import create_harness
+
+    called: list[bool] = []
+    harness = await create_harness(tmp_path)
+    try:
+        harness.session.set_extension_shutdown_handler(lambda: called.append(True))
+
+        harness.session.extension_runner.create_context().shutdown()
+
+        assert called == [True]
+    finally:
+        harness.session.dispose()

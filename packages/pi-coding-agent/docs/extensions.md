@@ -808,7 +808,9 @@ Python names: `ctx.is_idle()`, `ctx.abort()`, and `ctx.has_pending_messages()`.
 
 ### ctx.shutdown()
 
-`ctx.shutdown()` exists on `ExtensionContext`, but the stock `AgentSession` binding currently supplies a no-op shutdown action. Do not rely on it to exit the CLI.
+Requests that the host exit. Interactive mode registers a handler, so this leaves the CLI; it waits for the current turn to finish rather than cutting off a response in flight.
+
+A host that registers no handler (print or JSON mode, or an SDK embedder) leaves this a no-op: only the host knows what shutting down means for it.
 
 ### ctx.getContextUsage()
 

@@ -755,6 +755,7 @@ class AgentSession:
         self._allowed_tool_names = set(allowed_tool_names) if allowed_tool_names is not None else None
         self._excluded_tool_names = set(excluded_tool_names) if excluded_tool_names is not None else None
         self._base_tools_override = base_tools_override
+        self._extension_shutdown_handler: Callable[[], None] | None = None
         self._session_start_event = session_start_event or SessionStartEvent(reason="startup")
 
         # Extension runner: always constructed, even with an empty extension list, so
@@ -851,7 +852,7 @@ class AgentSession:
                 get_signal=lambda: self.agent.signal,
                 abort=lambda: asyncio.ensure_future(self.abort()),
                 has_pending_messages=lambda: self.pending_message_count > 0,
-                shutdown=lambda: None,
+                shutdown=self._extension_shutdown_action,
                 get_context_usage=lambda: self.get_context_usage(),
                 compact=self._extension_compact_action,
                 get_system_prompt=lambda: self.system_prompt,
@@ -862,6 +863,20 @@ class AgentSession:
                 wait_for_idle=self._wait_for_idle,
             )
         )
+
+    def set_extension_shutdown_handler(self, handler: Callable[[], None] | None) -> None:
+        """Register what `ctx.shutdown()` should do.
+
+        Port of TypeScript's `shutdownHandler` option. The session cannot end
+        the process itself -- only the host knows whether that means leaving
+        the TUI, closing a socket, or nothing at all -- so an unregistered
+        handler makes `ctx.shutdown()` a no-op rather than a guess.
+        """
+        self._extension_shutdown_handler = handler
+
+    def _extension_shutdown_action(self) -> None:
+        if self._extension_shutdown_handler is not None:
+            self._extension_shutdown_handler()
 
     def _extension_compact_action(
         self,
