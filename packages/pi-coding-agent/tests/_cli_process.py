@@ -32,12 +32,20 @@ def run_cli(
     agent_dir: str,
     env: dict[str, str] | None = None,
     timeout: float = 60.0,
+    stdin: str = "",
 ) -> CliResult:
     """Run the CLI with `agent_dir` as its agent directory and no network access.
 
     `timeout` mirrors the TypeScript watchdog that SIGKILLs a hung child. A
     signal-killed child would surface as a negative `code`, which is how the
     `expect(result.signal).toBeNull()` assertions are covered here.
+
+    `stdin` is always a pipe, never inherited, and defaults to empty so the
+    child sees EOF immediately. Inheriting is actively dangerous: under
+    `pytest-xdist` the runner's stdin is the execnet control channel, so a CLI
+    that reads stdin -- `--mode rpc` reads it as its command channel, and print
+    mode reads it as a piped prompt -- consumes the worker's instructions and
+    deadlocks the whole run.
     """
     process_env = {
         **os.environ,
@@ -49,6 +57,7 @@ def run_cli(
         [sys.executable, "-c", _RUNNER, *args],
         cwd=cwd,
         env=process_env,
+        input=stdin,
         capture_output=True,
         text=True,
         check=False,

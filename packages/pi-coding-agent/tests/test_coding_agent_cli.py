@@ -317,9 +317,39 @@ def test_main_json_mode_uses_json_output(monkeypatch):
     assert calls == {"mode": "json"}
 
 
-def test_main_reports_unported_rpc_mode(capsys):
-    assert cli.main(["--mode", "rpc"]) == 2
-    assert "RPC mode is not ported" in capsys.readouterr().err
+def test_main_dispatches_rpc_mode(monkeypatch):
+    """`--mode rpc` reaches the RPC driver.
+
+    `run_rpc_mode` is faked rather than run: the real one reads stdin as its
+    command channel, and under `pytest-xdist` that stdin is the worker's
+    execnet control channel -- calling it for real consumes the worker's
+    instructions and hangs the whole session.
+    """
+    calls: list[object] = []
+    runtime = object()
+
+    async def fake_build(parsed, cwd, agent_dir, project_trusted=True):
+        return runtime
+
+    async def fake_rpc_mode(runtime_host):
+        calls.append(runtime_host)
+        return 0
+
+    monkeypatch.setattr(cli, "build_session_runtime", fake_build)
+    monkeypatch.setattr(cli, "run_rpc_mode", fake_rpc_mode)
+
+    assert cli.main(["--mode", "rpc"]) == 0
+    assert calls == [runtime]
+
+
+def test_main_rejects_file_arguments_in_rpc_mode(capsys, tmp_path, monkeypatch):
+    """`@file` prepends file contents to a prompt, and RPC mode has no prompt."""
+    target = tmp_path / "notes.txt"
+    target.write_text("hello")
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.main(["--mode", "rpc", f"@{target}"]) == 1
+    assert "@file arguments are not supported in RPC mode" in capsys.readouterr().err
 
 
 def test_main_prints_version(capsys):

@@ -10,8 +10,8 @@ forking internals. Extend it with Python [Extensions](#extensions), [Skills](#sk
 resources in [Pi Packages](#pi-packages) and share them by git or local path.
 
 Pi ships with useful defaults but keeps the core small. It runs in interactive
-TUI mode, print mode, JSON event mode, a Python SDK, and the ported socket RPC
-stack. The legacy stdio RPC mode from the TypeScript package is not ported.
+TUI mode, print mode, JSON event mode, a Python SDK, the stdio JSONL RPC mode,
+and a Unix-socket RPC stack.
 
 ## Share your OSS coding agent sessions
 
@@ -565,10 +565,12 @@ For custom setup, pass `model_runtime`, `settings_manager`, `resource_loader`,
 
 ### RPC Mode
 
-`pp --mode rpc` is not ported. It exits with an error. Use the ported
-`pi_server` / `pi_client` / `pi_protocol` socket stack for process integration.
-The strict LF-delimited JSONL framing helpers are ported, but the legacy stdio
-mode driver is not. See [docs/rpc.md](docs/rpc.md).
+`pp --mode rpc` runs the agent headless behind a JSON protocol on
+stdin/stdout: a host writes one command per line and reads responses and events
+back. See [docs/rpc-stdio.md](docs/rpc-stdio.md).
+
+For multi-client access over a Unix socket, the `pi_server` / `pi_client` /
+`pi_protocol` stack is documented in [docs/rpc.md](docs/rpc.md).
 
 ---
 
@@ -622,7 +624,7 @@ prompts for project trust.
 | (default) | Interactive mode on a TTY |
 | `-p`, `--print` | Print response and exit |
 | `--mode json` | Output events as JSON lines |
-| `--mode rpc` | Parsed but not ported; use the socket RPC stack |
+| `--mode rpc` | Headless JSON-line protocol on stdin/stdout |
 | `--export <file>` | Parsed; the non-interactive export driver is not wired |
 
 In print mode, pi also reads piped stdin and merges it into the initial prompt:

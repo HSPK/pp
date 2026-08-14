@@ -81,6 +81,7 @@ from pi_coding_agent.core.trust_manager import ProjectTrustStore
 from pi_coding_agent.migrations import run_migrations, show_deprecation_warnings
 from pi_coding_agent.modes.interactive.theme.theme import set_custom_theme_discovery_enabled
 from pi_coding_agent.modes.print_mode import PrintModeOptions, run_print_mode
+from pi_coding_agent.modes.rpc import run_rpc_mode
 
 AppMode = Literal["interactive", "print", "json", "rpc"]
 
@@ -489,7 +490,7 @@ async def run_app(
     if parsed.no_themes:
         set_custom_theme_discovery_enabled(False)
 
-    if app_mode in ("print", "json"):
+    if app_mode in ("print", "json", "rpc"):
         # The protocol owns stdout from here on; stray writes go to stderr.
         take_over_stdout()
 
@@ -511,6 +512,10 @@ async def run_app(
         if app_mode == "interactive":
             return await run_interactive_mode(runtime, parsed, processed_files)
 
+        if app_mode == "rpc":
+            print_timings()
+            return await run_rpc_mode(runtime)
+
         initial = build_initial_message(
             parsed,
             file_text=processed_files.text,
@@ -529,7 +534,7 @@ async def run_app(
             ),
         )
     finally:
-        if app_mode in ("print", "json"):
+        if app_mode in ("print", "json", "rpc"):
             restore_stdout()
 
 
@@ -630,13 +635,6 @@ def main(argv: list[str] | None = None) -> int:
         search = parsed.list_models if isinstance(parsed.list_models, str) else None
         return asyncio.run(handle_list_models(search, agent_dir=get_agent_dir()))
 
-    if app_mode == "rpc":
-        print(
-            "RPC mode is not ported; use the pi_server/pi_client socket stack instead.",
-            file=sys.stderr,
-        )
-        return 2
-
     migrations = run_migrations(os.getcwd(), get_agent_dir())
     if migrations.migrated_auth_providers:
         providers = ", ".join(migrations.migrated_auth_providers)
@@ -650,16 +648,22 @@ def main(argv: list[str] | None = None) -> int:
         print(str(error), file=sys.stderr)
         return 1
 
+    if app_mode == "rpc" and parsed.file_args:
+        print("Error: @file arguments are not supported in RPC mode", file=sys.stderr)
+        return 1
+
     # Piped input becomes the head of the first prompt, before @file contents.
     # Content on stdin means there is nothing to interact with, so an
     # otherwise-interactive run degrades to print mode (TS does the same).
-    stdin_content = read_piped_stdin(stdin_is_tty)
+    # RPC mode owns stdin as its command channel, so draining it here would
+    # swallow the host's first commands and then report "No prompt given".
+    stdin_content = None if app_mode == "rpc" else read_piped_stdin(stdin_is_tty)
     if stdin_content is not None and app_mode == "interactive":
         app_mode = "print"
     record_timing("readPipedStdin")
 
     has_prompt = bool(parsed.messages or stdin_content or processed_files.text)
-    if app_mode != "interactive" and not has_prompt:
+    if app_mode not in ("interactive", "rpc") and not has_prompt:
         print("No prompt given.", file=sys.stderr)
         return 2
 

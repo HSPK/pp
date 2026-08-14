@@ -5,13 +5,14 @@ The TypeScript test drives `RpcClient` from
 `send`/`getData` members and asserts that `client.clone()` writes
 `{type: "clone"}` down the stdio pipe and unwraps `response.data`.
 
-That class is not ported. See the module docstring of
-`pi_coding_agent.modes.rpc` (quoted in the skip reason below): only the
-LF-only JSON-line framing (`jsonl.py`) was ported from the legacy stdio RPC
-mode. The mode driver and its client are superseded by the CBOR-over-Unix-socket
-`pi_server`/`pi_protocol`/`pi_client` stack, which has no `clone` command --
-`pi_coding_agent.client.remote_session.RemoteSession` exposes no `clone()`, so
-there is no equivalent behaviour to pin here.
+The stdio RPC *mode* is ported, and so is the `clone` command -- see
+`tests/suite/test_rpc_mode.py::test_clone_forks_at_the_leaf`, which pins the
+agent side of exactly this exchange. What is not ported is `RpcClient`, the
+host-*side* helper for driving a spawned agent: the client half belongs to
+whatever application embeds pi, and the wire protocol is all it needs.
+
+So the assertion below has no counterpart (there is no `client.clone()` to
+call), while the framing it depends on does, and is pinned underneath.
 """
 
 from __future__ import annotations
@@ -22,10 +23,10 @@ import pytest
 from pi_coding_agent.modes.rpc import iter_json_lines, serialize_json_line
 
 RPC_CLIENT_NOT_PORTED = (
-    "modes/rpc/rpc-client.ts is deliberately not ported: only jsonl.py "
-    "framing was taken from the legacy stdio RPC mode (see "
-    "pi_coding_agent.modes.rpc.__doc__). The socket stack that replaces it "
-    "has no clone command, so RpcClient.clone() has no counterpart."
+    "modes/rpc/rpc-client.ts is deliberately not ported: it is the host-side "
+    "half of the protocol, which belongs to the embedding application. The "
+    "agent side of the clone command is covered by "
+    "tests/suite/test_rpc_mode.py::test_clone_forks_at_the_leaf."
 )
 
 

@@ -95,7 +95,11 @@
           "path": "sdk.md"
         },
         {
-          "title": "RPC Mode",
+          "title": "Stdio RPC Mode",
+          "path": "rpc-stdio.md"
+        },
+        {
+          "title": "Socket RPC Mode",
           "path": "rpc.md"
         },
         {

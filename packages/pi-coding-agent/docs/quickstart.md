@@ -163,7 +163,7 @@ cat README.md | uv run --project /path/to/pp pp -p "Summarize this text"
 uv run --project /path/to/pp pp -p @screenshot.png "What's in this image?"
 ```
 
-Use `--mode json` for JSON event output. The legacy stdio `--mode rpc` is not ported; use the `pi_server` / `pi_client` socket stack instead.
+Use `--mode json` for a one-way JSON event stream, or `--mode rpc` for the bidirectional [stdio RPC protocol](rpc-stdio.md).
 
 ## Next steps
 
