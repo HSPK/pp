@@ -55,6 +55,7 @@ from ..utils.error_body import format_provider_error, normalize_provider_error
 from ..utils.event_stream import AssistantMessageEventStream
 from ..utils.http import HttpRequest, stream_sse
 from ..utils.json_parse import parse_json_with_repair, parse_streaming_json
+from ..utils.pi_user_agent import get_pi_user_agent
 from ..utils.provider_env import get_provider_env_value
 from ..utils.sanitize_unicode import sanitize_surrogates
 from ..utils.tasks import spawn
@@ -311,6 +312,22 @@ def merge_headers(*header_sources: dict[str, str] | None) -> dict[str, str]:
     return merged
 
 
+def merge_client_headers(model: Model[Any], *header_sources: dict[str, str] | None) -> dict[str, str]:
+    """`merge_headers`, but Kimi Coding is identified as pi.
+
+    The generated catalog gives Kimi models a `User-Agent: KimiCLI/1.5`, which
+    claims to be a different client. Their API is served on that identity, so
+    the header is replaced rather than merged -- case-insensitively, because
+    the incoming spelling is whatever the catalog and provider supplied.
+    """
+    merged = merge_headers(*header_sources)
+    if model.provider == "kimi-coding":
+        for name in [key for key in merged if key.lower() == "user-agent"]:
+            del merged[name]
+        merged["User-Agent"] = get_pi_user_agent()
+    return merged
+
+
 def has_header(headers: dict[str, str | None] | None, name: str) -> bool:
     if not headers:
         return False
@@ -375,7 +392,8 @@ def build_headers(
 
     if model.provider == "github-copilot":
         # Copilot: dynamic per-request headers, no x-api-key.
-        headers = merge_headers(
+        headers = merge_client_headers(
+            model,
             {
                 "accept": "application/json",
                 "anthropic-dangerous-direct-browser-access": "true",
@@ -390,7 +408,8 @@ def build_headers(
     if api_key and is_oauth_token(api_key):
         # OAuth: send Claude Code identity headers.
         oauth_betas = ["claude-code-20250219", "oauth-2025-04-20", *beta_features]
-        headers = merge_headers(
+        headers = merge_client_headers(
+            model,
             {
                 "accept": "application/json",
                 "anthropic-dangerous-direct-browser-access": "true",
@@ -408,7 +427,8 @@ def build_headers(
     if session_id and compat.send_session_affinity_headers:
         session_affinity_headers = {"x-session-affinity": session_id}
 
-    headers = merge_headers(
+    headers = merge_client_headers(
+        model,
         {
             "accept": "application/json",
             "anthropic-dangerous-direct-browser-access": "true",
