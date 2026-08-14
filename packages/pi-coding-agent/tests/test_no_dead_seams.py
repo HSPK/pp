@@ -127,3 +127,91 @@ def test_every_inert_default_is_supplied_outside_tests() -> None:
         "These collaborators are no-ops in the shipped package. Wire them, or add them to ALLOWED "
         "with a reason:\n  " + "\n  ".join(dead)
     )
+
+
+# --------------------------------------------------------------------------
+# The other two shapes the same defect takes.
+# --------------------------------------------------------------------------
+
+ARGS_MODULE = PACKAGES / "pi-coding-agent/src/pi_coding_agent/cli/args.py"
+EXTENSION_TYPES = PACKAGES / "pi-coding-agent/src/pi_coding_agent/core/extensions/types.py"
+
+# Args fields that exist to be reported, not consumed.
+ALLOWED_UNREAD_ARGS: dict[str, str] = {
+    "diagnostics": "collected by the parser and printed by the caller",
+}
+
+
+def _attribute_reads(path: Path) -> set[str]:
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return set()
+    return {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
+
+
+def test_every_parsed_argument_is_read_somewhere() -> None:
+    """`--use-theme` and `--no-themes` were both parsed and never consumed.
+
+    The flag is accepted, the field is set, and nothing downstream looks at
+    it -- so the option does nothing and says nothing.
+    """
+    tree = ast.parse(ARGS_MODULE.read_text(encoding="utf-8"))
+    fields = [
+        statement.target.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == "Args"
+        for statement in node.body
+        if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name)
+    ]
+    assert fields, "Args has no annotated fields; this test is not looking at the right class"
+
+    reads: set[str] = set()
+    for path in _iter_source_files():
+        if path == ARGS_MODULE:
+            continue
+        reads |= _attribute_reads(path)
+
+    unread = sorted(f for f in fields if f not in reads and f not in ALLOWED_UNREAD_ARGS)
+    assert unread == [], (
+        "These CLI options are parsed and never read, so they are accepted and ignored:\n  " + "\n  ".join(unread)
+    )
+
+
+def test_every_extension_event_is_constructed_somewhere() -> None:
+    """`ProjectTrustEvent` was defined, subscribable, and never emitted.
+
+    An event an extension can register for, that nothing constructs, is a
+    handler that never runs.
+    """
+    tree = ast.parse(EXTENSION_TYPES.read_text(encoding="utf-8"))
+    events = [
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        and node.name.endswith("Event")
+        and any(
+            isinstance(statement, ast.AnnAssign)
+            and isinstance(statement.target, ast.Name)
+            and statement.target.id == "type"
+            for statement in node.body
+        )
+    ]
+    assert events, "no event payloads found; this test is not looking at the right module"
+
+    constructed: set[str] = set()
+    for path in _iter_source_files():
+        if path == EXTENSION_TYPES:
+            continue
+        try:
+            module = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(module):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                constructed.add(node.func.id)
+
+    never = sorted(name for name in events if name not in constructed)
+    assert never == [], (
+        "These extension events are declared but never emitted, so their handlers never run:\n  " + "\n  ".join(never)
+    )
