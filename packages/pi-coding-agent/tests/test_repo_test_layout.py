@@ -22,7 +22,25 @@ from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
 
-PACKAGES_ROOT = Path(__file__).resolve().parents[3]
+
+def _collection_root() -> Path:
+    """The directory a single `pytest` run collects from.
+
+    In the monorepo that is `packages/`, because the suite is run as
+    `pytest packages/` and a basename collision between two *different*
+    packages is exactly the failure this guards. In this package's own
+    repository there is no such directory and no cross-package run, so the
+    scope narrows to the repository root.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if parent.name == "packages":
+            return parent
+    # tests/ -> repository root
+    return here.parents[1]
+
+
+PACKAGES_ROOT = _collection_root()
 
 _IGNORED_DIRS = frozenset({"__pycache__", "node_modules", "build", "dist"})
 

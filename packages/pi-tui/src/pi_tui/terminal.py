@@ -7,7 +7,7 @@ To keep this module testable without a real TTY, all interaction with the
 operating system (raw mode, stdin bytes, terminal size, resize signals) is
 routed through a small `TerminalIo` bundle of callables. `real_terminal_io()`
 builds the bundle backed by the real terminal; tests build their own bundle
-backed by an in-memory fake (see `packages/pi-tui/tests/fakes.py`) so no test
+backed by an in-memory fake (see `pi_tui.testing`) so no test
 ever touches a real TTY or blocks on stdin.
 
 Windows console support is out of scope for this port (the native

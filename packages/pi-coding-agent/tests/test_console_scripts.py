@@ -12,8 +12,10 @@ must stay fast and offline: only commands that neither hit the network nor
 block on input belong here. Stdin is closed, so a command that waits for input
 fails fast instead of hanging.
 
-This file covers every `project.scripts` entry in the workspace, not just
-`pi-ai`'s, which is why it lives here rather than in one package's tests.
+This file covers the scripts installed by this package and by `pp-ai`, which
+it depends on. `pp-evals` is not covered here: it depends on *this* package, so
+its script is not installed in this environment -- it is covered by its own
+suite.
 """
 
 from __future__ import annotations
@@ -21,11 +23,20 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+SCRIPT_DIR = Path(sys.executable).parent
+"""The `bin/` of the interpreter running the suite.
+
+Resolving scripts here rather than through `uv run` tests the environment the
+suite is actually running in. `uv run` would build or reuse an environment of
+its own choosing, so a script could pass here while being broken in the
+installed one -- and it needs a workspace on disk, which a released package
+does not have.
+"""
 
 # (script, args, substring that must appear in the output)
 SCRIPT_INVOCATIONS: tuple[tuple[str, tuple[str, ...], str], ...] = (
@@ -33,7 +44,6 @@ SCRIPT_INVOCATIONS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("pp-ai", ("list",), "anthropic"),
     ("pp", ("--help",), "Usage"),
     ("pp", ("--version",), "."),
-    ("pp-evals", ("--help",), "usage"),
 )
 
 _IDS = [f"{script} {' '.join(args)}".strip() for script, args, _ in SCRIPT_INVOCATIONS]
@@ -42,9 +52,11 @@ _IDS = [f"{script} {' '.join(args)}".strip() for script, args, _ in SCRIPT_INVOC
 def run_script(script: str, args: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
     """Run an installed console script with stdin closed, so a hang fails fast."""
     environment = {**os.environ, "PI_OFFLINE": "1", "NO_COLOR": "1"}
+    executable = SCRIPT_DIR / script
+    assert executable.exists(), f"{script} is not installed in {SCRIPT_DIR}"
     return subprocess.run(
-        ["uv", "run", script, *args],
-        cwd=REPO_ROOT,
+        [str(executable), *args],
+        cwd=tempfile.gettempdir(),
         capture_output=True,
         text=True,
         timeout=300,
@@ -96,14 +108,14 @@ def test_login_reaches_the_provider_flow() -> None:
 
 @pytest.mark.parametrize(
     "target",
-    ["pi_ai.cli:main", "pi_coding_agent.cli:main", "pi_evals.run_evals:main"],
+    ["pi_ai.cli:main", "pi_coding_agent.cli:main"],
 )
 def test_entry_point_target_is_importable_and_callable(target: str) -> None:
     """Each `project.scripts` target must resolve, so a rename cannot break the script."""
     module_name, attribute = target.split(":")
     result = subprocess.run(
         [sys.executable, "-c", f"import {module_name} as m; assert callable(m.{attribute})"],
-        cwd=REPO_ROOT,
+        cwd=tempfile.gettempdir(),
         capture_output=True,
         text=True,
         timeout=180,

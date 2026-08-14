@@ -3,7 +3,7 @@
 Python port of `packages/tui/test/terminal.test.ts`.
 
 `ProcessTerminal` is exercised entirely through a `FakeTerminalIo` (see
-`tests/fakes.py`); no test touches a real TTY or blocks on stdin.
+`pi_tui.testing`); no test touches a real TTY or blocks on stdin.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ import signal
 import sys
 
 import pytest
-from fakes import FakeTerminalIo, ManualTimers
 from pi_tui.keys import set_kitty_protocol_active
 from pi_tui.terminal import (
     TERMINAL_PROGRESS_ACTIVE_SEQUENCE,
@@ -34,6 +33,7 @@ from pi_tui.terminal import (
     normalize_native_shift_enter_input,
     real_terminal_io,
 )
+from pi_tui.testing import FakeTerminalIo, ManualTimers
 
 
 class TestNormalizeNativeShiftEnterInput:

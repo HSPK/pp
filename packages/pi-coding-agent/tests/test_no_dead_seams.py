@@ -22,7 +22,30 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-PACKAGES = Path(__file__).resolve().parents[2]
+
+def _source_roots() -> list[Path]:
+    """Every `src/` tree this guard should scan, in either repository layout.
+
+    In the monorepo that is all nine `packages/pi-*/src`. In this package's own
+    repository the siblings are installed dependencies, not checkouts, so the
+    scope is this repository alone.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if parent.name == "packages":
+            return sorted(package / "src" for package in parent.glob("pi-*") if (package / "src").is_dir())
+    return [here.parents[1] / "src"]
+
+
+def _test_roots() -> list[Path]:
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if parent.name == "packages":
+            return sorted(package / "tests" for package in parent.glob("pi-*") if (package / "tests").is_dir())
+    return [here.parents[1] / "tests"]
+
+
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _is_inert_default(value: ast.expr) -> bool:
@@ -53,19 +76,24 @@ ALLOWED: dict[tuple[str, str], str] = {
 
 def _iter_source_files() -> list[Path]:
     files: list[Path] = []
-    for package in sorted(PACKAGES.glob("pi-*")):
-        for path in (package / "src").rglob("*.py"):
+    for root in _source_roots():
+        for path in root.rglob("*.py"):
             if "__pycache__" not in str(path):
                 files.append(path)
+    # A guard that scans nothing passes. That has already happened twice in
+    # this file (a regex that matched no lambda, and a wrong `parents[]`
+    # index), so an empty scan is a failure, not a pass.
+    assert files, f"no source files found under {[str(root) for root in _source_roots()]}"
     return files
 
 
 def _iter_test_files() -> list[Path]:
     files: list[Path] = []
-    for package in sorted(PACKAGES.glob("pi-*")):
-        for path in (package / "tests").rglob("*.py"):
+    for root in _test_roots():
+        for path in root.rglob("*.py"):
             if "__pycache__" not in str(path):
                 files.append(path)
+    assert files, f"no test files found under {[str(root) for root in _test_roots()]}"
     return files
 
 
@@ -133,8 +161,8 @@ def test_every_inert_default_is_supplied_outside_tests() -> None:
 # The other two shapes the same defect takes.
 # --------------------------------------------------------------------------
 
-ARGS_MODULE = PACKAGES / "pi-coding-agent/src/pi_coding_agent/cli/args.py"
-EXTENSION_TYPES = PACKAGES / "pi-coding-agent/src/pi_coding_agent/core/extensions/types.py"
+ARGS_MODULE = PACKAGE_ROOT / "src/pi_coding_agent/cli/args.py"
+EXTENSION_TYPES = PACKAGE_ROOT / "src/pi_coding_agent/core/extensions/types.py"
 
 # Args fields that exist to be reported, not consumed.
 ALLOWED_UNREAD_ARGS: dict[str, str] = {

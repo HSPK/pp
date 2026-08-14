@@ -1,6 +1,10 @@
-"""Tests ported from packages/ai/test/faux-provider.test.ts, plus a direct
-`pi_agent.agent_loop` integration test proving the faux provider can drive a
-full prompt -> tool call -> tool result -> final answer cycle."""
+"""Tests ported from packages/ai/test/faux-provider.test.ts.
+
+The agent-loop integration case that used to live here now sits in
+`pp-agent-core` (`tests/test_faux_provider_agent_loop.py`): it needs
+`pi_agent`, and `pp-agent-core` depends on `pp-ai`, so keeping it here made the
+two packages depend on each other -- fine inside one workspace, unresolvable
+once each is its own repository."""
 
 from __future__ import annotations
 
@@ -527,62 +531,3 @@ async def test_supports_aborting_mid_toolcall_stream_when_paced() -> None:
     assert "toolcall_delta" in events
     assert "error" in events
     assert "toolcall_end" not in events
-
-
-# --------------------------------------------------------------------------
-# Integration: driving pi_agent.agent_loop through the faux provider.
-# --------------------------------------------------------------------------
-
-
-async def test_faux_provider_drives_agent_loop_prompt_tool_call_final_answer() -> None:
-    """Full prompt -> tool call -> tool result -> final answer cycle.
-
-    This proves the faux provider satisfies the same `StreamFn` contract the
-    ported agent loop expects from a real provider: `agent_loop` calls
-    `stream_fn(model, context, options)` and expects an
-    `AssistantMessageEventStream`.
-    """
-    from pi_agent import AgentContext, AgentLoopConfig, AgentTool, AgentToolResult, agent_loop, default_convert_to_llm
-
-    handle = faux_provider()
-    tool_call = faux_tool_call("echo", {"value": "hi"}, id="call-1")
-    handle.set_responses(
-        [
-            faux_assistant_message([tool_call], stop_reason="toolUse"),
-            faux_assistant_message("all done"),
-        ]
-    )
-
-    async def execute(tool_call_id, params, signal=None, on_update=None):
-        return AgentToolResult(content=[TextContent(text=f"echo:{params.get('value', '')}")], details={})
-
-    echo_tool = AgentTool(
-        name="echo",
-        description="Echo a value",
-        parameters={"type": "object", "properties": {"value": {"type": "string"}}, "required": ["value"]},
-        label="echo",
-        execute=execute,
-    )
-
-    config = AgentLoopConfig(model=handle.get_model(), convert_to_llm=default_convert_to_llm)
-
-    def stream_fn(model, context, options=None):
-        return handle.provider.stream(model, context, options)
-
-    stream = agent_loop(
-        [UserMessage(content="please echo hi")], AgentContext(tools=[echo_tool]), config, None, stream_fn
-    )
-    events = [event async for event in stream]
-    messages = await stream.result()
-
-    assert [event.type for event in events][:2] == ["agent_start", "turn_start"]
-    assert events[-1].type == "agent_end"
-
-    tool_results = [m for m in messages if m.role == "toolResult"]
-    assert len(tool_results) == 1
-    assert tool_results[0].content[0].text == "echo:hi"
-    assert tool_results[0].is_error is False
-
-    final_assistant_messages = [m for m in messages if m.role == "assistant"]
-    assert final_assistant_messages[-1].content[0].text == "all done"
-    assert handle.state.call_count == 2

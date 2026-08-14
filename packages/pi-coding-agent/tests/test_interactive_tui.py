@@ -7,17 +7,13 @@ paste, the copy-shortcut confirmation, and the clear-on-shrink status spacing.
 from __future__ import annotations
 
 import asyncio
-import sys
-from pathlib import Path
 
 import pytest
 from pi_coding_agent.modes.interactive.interactive_mode import InteractiveMode, create_interactive_tui
 from pi_tui.component import Component, Container
 from pi_tui.components.text import Text
+from pi_tui.testing import FakeTerminal, MiniAltScreenModel
 from pi_tui.tui import is_viewport_tui
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "pi-tui" / "tests"))
-from fakes import FakeTerminal, MiniAltScreenModel
 
 
 async def wait_render(ui: object, timeout_s: float = 5.0) -> None:

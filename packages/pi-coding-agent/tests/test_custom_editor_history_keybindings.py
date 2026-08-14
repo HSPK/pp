@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 from pi_coding_agent.core.app_keybindings import KeybindingsManager
@@ -12,10 +10,8 @@ from pi_coding_agent.modes.interactive.components.custom_editor import CustomEdi
 from pi_tui.components.editor import EditorTheme
 from pi_tui.components.select_list import SelectListTheme
 from pi_tui.keybindings import get_keybindings, set_keybindings
+from pi_tui.testing import FakeTerminal
 from pi_tui.tui_main_screen import TuiMainScreen
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "pi-tui" / "tests"))
-from fakes import FakeTerminal
 
 
 def _identity(text: str) -> str:

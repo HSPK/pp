@@ -17,6 +17,7 @@ parts.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -83,12 +84,14 @@ def test_runs_the_smoke_eval_and_indexes_its_session(offline_runner: Path) -> No
     record = records[0]
     assert record["schemaVersion"] == 1
     assert record["harness"] == "pi-coding-agent"
+    # The recorded path is the eval file relative to the working directory
+    # pytest ran in, so hardcoding it would pin the repository layout: it is
+    # `packages/pi-evals/src/...` in a monorepo checkout and `src/...` in this
+    # package's own repository.
+    smoke_path = os.path.relpath(EVALS_PATH / "smoke_eval.py", Path.cwd())
     assert record["test"] == {
-        "id": (
-            "packages/pi-evals/src/pi_evals/evals/smoke_eval.py"
-            "::test_pi_coding_agent_smoke__runs_a_basic_prompt_end_to_end"
-        ),
-        "file": "packages/pi-evals/src/pi_evals/evals/smoke_eval.py",
+        "id": f"{smoke_path}::test_pi_coding_agent_smoke__runs_a_basic_prompt_end_to_end",
+        "file": smoke_path,
         "name": "runs a basic prompt end to end",
         "fullName": "Pi Coding Agent smoke > runs a basic prompt end to end",
         "status": "passed",

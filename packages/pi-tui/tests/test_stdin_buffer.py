@@ -6,8 +6,8 @@ Python port of `packages/tui/test/stdin-buffer.test.ts`.
 from __future__ import annotations
 
 import pytest
-from fakes import wait_until
 from pi_tui.stdin_buffer import StdinBuffer
+from pi_tui.testing import wait_until
 
 
 def make_buffer(timeout: float = 0.01) -> tuple[StdinBuffer, list[str]]:

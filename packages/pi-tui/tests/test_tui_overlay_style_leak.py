@@ -1,7 +1,7 @@
 """Python port of `packages/tui/test/tui-overlay-style-leak.test.ts`.
 
 The TypeScript suite reads the italic attribute off xterm.js cells; this port
-reads it off `MiniTerminalModel` (see `tests/fakes.py`), which now tracks the
+reads it off `MiniTerminalModel` (see `pi_tui.testing`), which now tracks the
 italic SGR attribute per cell for exactly this purpose.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from fakes import FakeTerminal, MiniTerminalModel
+from pi_tui.testing import FakeTerminal, MiniTerminalModel
 from pi_tui.tui import OverlayOptions
 from pi_tui.tui_main_screen import TuiMainScreen
 

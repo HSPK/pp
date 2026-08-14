@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -28,11 +27,9 @@ from pi_coding_agent.utils.version_check import (
     is_newer_package_version,
     resolve_version_check_package,
 )
+from pi_tui.testing import FakeTerminal
 from pi_tui.tui_alt_screen import TuiAltScreen
 from pi_tui.tui_main_screen import TuiMainScreen
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "pi-tui" / "tests"))
-from fakes import FakeTerminal
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b[=>]")
 

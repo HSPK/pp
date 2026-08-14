@@ -25,7 +25,6 @@ import asyncio
 import os
 import re
 
-from fakes import FakeTerminal, wait_until
 from pi_tui.autocomplete import (
     AppliedCompletion,
     AutocompleteItem,
@@ -46,6 +45,7 @@ from pi_tui.keybindings import (
     KeybindingsManager,
     set_keybindings,
 )
+from pi_tui.testing import FakeTerminal, wait_until
 from pi_tui.tui_main_screen import TuiMainScreen
 from pi_tui.utils import strip_terminal_sequences, visible_width
 
