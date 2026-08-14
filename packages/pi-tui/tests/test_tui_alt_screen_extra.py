@@ -12,7 +12,6 @@ import asyncio
 import base64
 
 import pytest
-from fakes import FakeTerminal, MiniAltScreenModel, wait_until
 from pi_tui.component import Component
 from pi_tui.components.image import Image, ImageOptions, ImageTheme
 from pi_tui.components.scroll_view import ScrollView, ScrollViewOptions
@@ -26,6 +25,7 @@ from pi_tui.terminal_image import (
     reset_capabilities_cache,
     set_capabilities,
 )
+from pi_tui.testing import FakeTerminal, MiniAltScreenModel, wait_until
 from pi_tui.tui_alt_screen import TuiAltScreen
 
 

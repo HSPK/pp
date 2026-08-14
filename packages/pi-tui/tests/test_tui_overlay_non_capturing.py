@@ -10,7 +10,7 @@ import asyncio
 from collections.abc import Callable
 
 import pytest
-from fakes import FakeTerminal, MiniTerminalModel
+from pi_tui.testing import FakeTerminal, MiniTerminalModel
 from pi_tui.tui import OverlayOptions, OverlayUnfocusOptions
 from pi_tui.tui_main_screen import TuiMainScreen
 

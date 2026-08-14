@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 
 import pi_tui.components.editor as editor_module
-from fakes import FakeTerminal
 from pi_tui.autocomplete import (
     AppliedCompletion,
     AutocompleteItem,
@@ -26,6 +25,7 @@ from pi_tui.autocomplete import (
 )
 from pi_tui.components.editor import Editor, EditorTheme
 from pi_tui.components.select_list import SelectListTheme
+from pi_tui.testing import FakeTerminal
 from pi_tui.tui_main_screen import TuiMainScreen
 from pi_tui.utils import strip_terminal_sequences, visible_width
 

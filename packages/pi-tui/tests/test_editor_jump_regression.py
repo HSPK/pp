@@ -7,8 +7,8 @@ and searched previous lines, moving the cursor to the wrong line.
 
 from __future__ import annotations
 
-from fakes import FakeTerminal
 from pi_tui.components.editor import Editor
+from pi_tui.testing import FakeTerminal
 from pi_tui.tui_main_screen import TuiMainScreen
 from test_editor import DEFAULT_EDITOR_THEME
 

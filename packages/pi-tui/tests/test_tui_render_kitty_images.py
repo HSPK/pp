@@ -12,7 +12,6 @@ import asyncio
 from collections.abc import Iterator
 
 import pytest
-from fakes import FakeTerminal
 from pi_tui.components.image import Image, ImageOptions, ImageTheme
 from pi_tui.terminal_image import (
     CellDimensions,
@@ -23,6 +22,7 @@ from pi_tui.terminal_image import (
     set_capabilities,
     set_cell_dimensions,
 )
+from pi_tui.testing import FakeTerminal
 from pi_tui.tui_main_screen import TuiMainScreen, delete_kitty_image
 
 

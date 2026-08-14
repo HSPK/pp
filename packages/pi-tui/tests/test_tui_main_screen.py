@@ -2,7 +2,7 @@
 
 Python port of the non-Kitty-image cases in `packages/tui/test/tui-render.test.ts`.
 
-Content assertions use `MiniTerminalModel` (see `tests/fakes.py`), a small
+Content assertions use `MiniTerminalModel` (see `pi_tui.testing`), a small
 escape-sequence interpreter covering only the sequences `TuiMainScreen`
 actually emits, playing the same role as the TypeScript suite's xterm.js-backed
 `VirtualTerminal` without depending on a real terminal-emulator library. A
@@ -23,7 +23,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from fakes import FakeTerminal, MiniTerminalModel
+from pi_tui.testing import FakeTerminal, MiniTerminalModel
 from pi_tui.tui import TuiStopOptions
 from pi_tui.tui_main_screen import (
     TuiMainScreen,

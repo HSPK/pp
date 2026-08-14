@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -23,9 +22,7 @@ from pi_coding_agent.modes.interactive.interactive_mode import (
     InteractiveModeOptions,
 )
 from pi_coding_agent.utils import tools_manager
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "pi-tui" / "tests"))
-from fakes import FakeTerminal
+from pi_tui.testing import FakeTerminal
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b[=>]")
 

@@ -13,13 +13,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 import pytest
-from fakes import FakeTerminal
 from pi_tui.terminal_image import (
     CellDimensions,
     get_cell_dimensions,
     reset_capabilities_cache,
     set_cell_dimensions,
 )
+from pi_tui.testing import FakeTerminal
 from pi_tui.tui_main_screen import TuiMainScreen
 
 

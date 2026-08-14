@@ -11,7 +11,7 @@ matches byte-for-byte.
 The upstream `VirtualTerminal`/`@xterm/headless` cases in "Pre-styled text"
 and "Heading with inline code" read real terminal cell attributes
 (`isItalic()`, `isUnderline()`) after driving a full TUI event loop. This
-port drives the same TUI against `MiniTerminalModel` (see `tests/fakes.py`),
+port drives the same TUI against `MiniTerminalModel` (see `pi_tui.testing`),
 which tracks the italic and underline SGR attributes per cell.
 """
 
@@ -21,9 +21,9 @@ import asyncio
 import re
 
 import pytest
-from fakes import FakeTerminal, MiniTerminalModel
 from pi_tui.components.markdown import DefaultTextStyle, Markdown, MarkdownOptions, MarkdownTheme
 from pi_tui.terminal_image import TerminalCapabilities, reset_capabilities_cache, set_capabilities
+from pi_tui.testing import FakeTerminal, MiniTerminalModel
 from pi_tui.tui_main_screen import TuiMainScreen
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")

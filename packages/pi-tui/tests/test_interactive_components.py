@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from fakes import FakeTerminal, wait_until
 from pi_tui.components.h_stack import HStack
 from pi_tui.components.loader import (
     DEFAULT_FRAMES,
@@ -29,6 +28,7 @@ from pi_tui.keybindings import (
     get_keybindings,
     set_keybindings,
 )
+from pi_tui.testing import FakeTerminal, wait_until
 from pi_tui.timers import schedule_interval
 from pi_tui.tui_main_screen import TuiMainScreen
 from pi_tui.utils import strip_terminal_sequences, visible_width

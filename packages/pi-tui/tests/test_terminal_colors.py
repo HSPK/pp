@@ -8,8 +8,8 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from fakes import FakeTerminal
 from pi_tui.terminal_colors import RgbColor, parse_osc11_background_color, parse_terminal_color_scheme_report
+from pi_tui.testing import FakeTerminal
 from pi_tui.tui_main_screen import TuiMainScreen
 
 

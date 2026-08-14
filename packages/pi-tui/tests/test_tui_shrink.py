@@ -1,7 +1,7 @@
 """Python port of `packages/tui/test/tui-shrink.test.ts`.
 
 The TypeScript suite drives an xterm.js-backed `VirtualTerminal`; this port uses
-`FakeTerminal` plus `MiniTerminalModel` from `tests/fakes.py`, which models the
+`FakeTerminal` plus `MiniTerminalModel` from `pi_tui.testing`, which models the
 subset of escape sequences `TuiMainScreen` emits (see `tests/test_tui_main_screen.py`).
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from fakes import FakeTerminal, MiniTerminalModel
+from pi_tui.testing import FakeTerminal, MiniTerminalModel
 from pi_tui.tui_main_screen import TuiMainScreen
 
 

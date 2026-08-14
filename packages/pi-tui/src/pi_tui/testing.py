@@ -1,5 +1,11 @@
 """In-memory fakes for the terminal I/O boundary.
 
+Shipped with the package rather than kept in `tests/`: `pp-coding-agent` builds
+its interactive-mode tests on these doubles, and a helper that lives only in
+another distribution's test directory is not importable once the two are
+separate installs. It happened to work in the monorepo because `pytest` put
+every package's `tests/` on `sys.path`.
+
 Used by tests exercising `pi_tui.terminal`, `pi_tui.tui`, `pi_tui.tui_main_screen`,
 and `pi_tui.tui_alt_screen` so none of them ever touch a real TTY or block on
 stdin. Mirrors the role of `packages/tui/test/virtual-terminal.ts`, but at the

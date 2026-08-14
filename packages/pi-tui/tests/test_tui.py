@@ -12,8 +12,8 @@ import asyncio
 from collections.abc import Callable
 
 import pytest
-from fakes import FakeTerminal, MiniTerminalModel
 from pi_tui.component import Container
+from pi_tui.testing import FakeTerminal, MiniTerminalModel
 from pi_tui.tui import (
     OverlayMargin,
     OverlayOptions,

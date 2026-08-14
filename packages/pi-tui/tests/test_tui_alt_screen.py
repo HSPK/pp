@@ -16,13 +16,13 @@ import sys
 from dataclasses import replace
 
 import pytest
-from fakes import FakeTerminal, MiniAltScreenModel, wait_until
 from pi_tui.component import Component
 from pi_tui.components.scroll_view import ScrollView, ScrollViewOptions
 from pi_tui.components.stack import Stack, StackEntry
 from pi_tui.keybindings import TUI_KEYBINDINGS, KeybindingsManager, get_keybindings, set_keybindings
 from pi_tui.layout import get_scroll_view_box, get_scrollbar_geometry
 from pi_tui.terminal_image import hyperlink
+from pi_tui.testing import FakeTerminal, MiniAltScreenModel, wait_until
 from pi_tui.tui_alt_screen import (
     SelectionPoint,
     SelectionRange,

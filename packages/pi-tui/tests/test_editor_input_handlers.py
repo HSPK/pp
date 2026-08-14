@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import re
 
-from fakes import FakeTerminal
 from pi_tui.components.editor import (
     Editor,
     EditorOptions,
@@ -25,6 +24,7 @@ from pi_tui.keybindings import (
     KeybindingsManager,
     set_keybindings,
 )
+from pi_tui.testing import FakeTerminal
 from pi_tui.tui_main_screen import TuiMainScreen
 from pi_tui.utils import strip_terminal_sequences, visible_width
 
