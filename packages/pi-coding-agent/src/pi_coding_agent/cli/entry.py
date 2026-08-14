@@ -58,11 +58,17 @@ from pi_coding_agent.core.agent_session_runtime import (
     create_agent_session_runtime,
 )
 from pi_coding_agent.core.config import VERSION, get_agent_dir
-from pi_coding_agent.core.extensions import SessionRuntimeActions, discover_and_load_extensions
+from pi_coding_agent.core.extensions import (
+    SessionRuntimeActions,
+    discover_and_load_extensions,
+    emit_project_trust_event,
+)
+from pi_coding_agent.core.extensions.types import ProjectTrustEvent
 from pi_coding_agent.core.model_resolver import resolve_model_scope
 from pi_coding_agent.core.model_runtime import ModelRuntime
 from pi_coding_agent.core.output_guard import restore_stdout, take_over_stdout
 from pi_coding_agent.core.project_trust import (
+    ExtensionTrustDecision,
     create_project_trust_context,
     resolve_project_trusted,
 )
@@ -303,12 +309,42 @@ async def resolve_startup_trust(parsed: Args, cwd: str, agent_dir: str, app_mode
         has_ui=app_mode == "interactive" and sys.stdout.isatty(),
         ui=_StartupTrustUI(select),
     )
+
+    async def decide_with_extensions(target_cwd: str) -> ExtensionTrustDecision | None:
+        """Give user-level extensions the first word, as upstream does.
+
+        Only extensions from `~/.pi/agent/extensions` are loaded here:
+        `project_trusted=False` keeps the project's own `.pi/extensions` out,
+        which is the whole point -- running them to decide whether they may
+        run would answer the question with the code being questioned.
+        """
+        loaded = await discover_and_load_extensions(
+            parsed.extensions or [],
+            target_cwd,
+            project_trusted=False,
+            agent_dir=agent_dir,
+            no_extensions=bool(parsed.no_extensions),
+        )
+        emitted = await emit_project_trust_event(loaded.extensions, ProjectTrustEvent(cwd=target_cwd), context)
+        for failure in emitted.errors:
+            print(
+                f'Extension "{failure.extension_path}" project_trust error: {failure.error}',
+                file=sys.stderr,
+            )
+        if emitted.result is None or emitted.result.trusted == "undecided":
+            return None
+        return ExtensionTrustDecision(
+            trusted=emitted.result.trusted == "yes",
+            remember=bool(emitted.result.remember),
+        )
+
     return await resolve_project_trusted(
         cwd=cwd,
         trust_store=trust_store,
         project_trust_context=context,
         trust_override=parsed.project_trust_override,
         default_project_trust=bootstrap_settings.get_default_project_trust(),
+        trust_decider=decide_with_extensions,
     )
 
 
