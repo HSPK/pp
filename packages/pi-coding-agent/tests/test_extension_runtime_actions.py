@@ -259,3 +259,45 @@ async def test_ctx_shutdown_calls_the_registered_handler(tmp_path: Any, monkeypa
         assert called == [True]
     finally:
         harness.session.dispose()
+
+
+# --------------------------------------------------------------------------
+# pi.events
+# --------------------------------------------------------------------------
+
+
+async def test_an_event_bus_exists_without_the_host_supplying_one() -> None:
+    """Upstream resolves `eventBus ?? createEventBus()`.
+
+    Left at `None`, every `pi.events.emit` is a no-op and `on` returns an
+    inert unsubscribe -- extensions that coordinate through the bus fail
+    silently.
+    """
+    actions = SessionRuntimeActions().actions
+
+    assert actions.event_bus is not None
+
+
+async def test_extensions_can_coordinate_through_pi_events() -> None:
+    """Two extensions sharing one holder must reach each other."""
+    holder = SessionRuntimeActions()
+    publisher = ExtensionAPI(Extension(path="a.py", resolved_path="a.py", handlers={}), holder.actions)
+    subscriber = ExtensionAPI(Extension(path="b.py", resolved_path="b.py", handlers={}), holder.actions)
+
+    seen: list[Any] = []
+    unsubscribe = subscriber.events.on("build", seen.append)
+    publisher.events.emit("build", {"status": "done"})
+    assert seen == [{"status": "done"}]
+
+    unsubscribe()
+    publisher.events.emit("build", {"status": "again"})
+    assert seen == [{"status": "done"}]
+
+
+async def test_a_host_supplied_bus_is_used_instead() -> None:
+    from pi_coding_agent.core.event_bus import create_event_bus
+
+    bus = create_event_bus()
+    holder = SessionRuntimeActions(event_bus=bus)
+
+    assert holder.actions.event_bus is bus
