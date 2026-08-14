@@ -1446,7 +1446,7 @@ Theme objects exist under `pi_coding_agent.modes.interactive.theme`, but extensi
 | Mode | `ctx.mode` | `ctx.has_ui` | Notes |
 |------|------------|--------------|-------|
 | Interactive | `"tui"` | `True` | Widgets, dialogs, status, title and tools-expanded are wired |
-| RPC | `"rpc"` if a host binds it | Host-dependent | Legacy stdio RPC mode is not ported |
+| RPC | `"rpc"` | Dialogs and status/widget calls travel over the [stdio RPC protocol](rpc-stdio.md) | Widget component factories are dropped; only plain lines cross the wire |
 | JSON | `"json"` if a host binds it | `False` unless supplied | Event stream to stdout |
 | Print | `"print"` | `False` | Default runner context |
 

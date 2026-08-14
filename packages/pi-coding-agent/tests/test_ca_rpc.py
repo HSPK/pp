@@ -1,25 +1,18 @@
 """Python port of `packages/coding-agent/test/rpc.test.ts`.
 
-Nothing in this file runs, for two independent reasons, and both are worth
-stating because either one alone would already disqualify it:
+Nothing in this file runs, but the reason is narrower than it used to be.
 
-1. **The TypeScript suite is credential-gated e2e.** The whole `describe` is
-   `describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_TOKEN)`,
-   and every case makes real Anthropic calls through a spawned `dist/cli.js`.
-   It pins no verified behavior on the TypeScript side either unless someone
-   runs it with a paid key.
-2. **The legacy stdio RPC mode is not ported.** `RpcClient` speaks
-   `src/modes/rpc/rpc-client.ts`'s line-framed stdio protocol to
-   `rpc-mode.ts`. This port keeps only that protocol's framing
-   (`modes/rpc/jsonl.py`, cross-checked byte for byte against the TypeScript
-   and covered by its own tests); the mode driver is superseded by the
-   `pi_server`/`pi_protocol`/`pi_client` socket stack, which *is* ported and
-   is exercised end to end over a real Unix socket in
-   `tests/test_agent_session_runtime.py`. See the README's "Not ported, by
-   decision" list and `modes/rpc/__init__.py`'s module docstring.
+The RPC mode itself **is** ported (`modes/rpc/`), and the behaviour these cases
+describe is pinned without credentials in `tests/suite/test_rpc_mode.py`,
+driving a real `AgentSession` from the faux provider. What is not reproducible
+here is the *shape* of the TypeScript suite: the whole `describe` is
+`describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_TOKEN)`
+and every case makes real Anthropic calls through a spawned `dist/cli.js`, so
+it pins nothing on the TypeScript side either unless someone runs it with a
+paid key. Reproducing it faithfully would mean spending real tokens per case.
 
-Each TypeScript case is recorded below with what it asserts, so the gap stays
-visible if the mode is ever ported.
+Each TypeScript case is still recorded below with what it asserts, and with
+where the same behaviour is covered here, so the mapping stays checkable.
 """
 
 from __future__ import annotations
@@ -27,12 +20,61 @@ from __future__ import annotations
 import pytest
 
 _REASON = (
-    "test/rpc.test.ts is credential-gated e2e (ANTHROPIC_API_KEY/ANTHROPIC_OAUTH_TOKEN) "
-    "and drives the legacy stdio RPC mode, which this port replaces with the "
-    "pi_server/pi_client socket stack (see modes/rpc/__init__.py)."
+    "test/rpc.test.ts is credential-gated e2e (ANTHROPIC_API_KEY/ANTHROPIC_OAUTH_TOKEN): "
+    "every case spawns a real CLI and makes paid Anthropic calls. The RPC mode is "
+    "ported; the same behaviour is pinned credential-free in "
+    "tests/suite/test_rpc_mode.py (see COVERED_BY below)."
 )
 
-pytestmark = pytest.mark.skip(reason=_REASON)
+COVERED_BY = {
+    "test_should_get_state": "test_get_state_reports_the_live_session",
+    "test_should_execute_bash_command": "test_bash_runs_the_command_and_records_it",
+    "test_should_set_and_get_thinking_level": "test_toggle_commands_reach_the_session",
+    "test_should_cycle_thinking_level": "test_cycle_with_nothing_to_cycle_to_answers_null_data",
+    "test_should_get_available_thinking_levels": "test_get_available_thinking_levels",
+    "test_should_get_available_models": "test_get_available_models_lists_the_snapshot",
+    "test_should_create_new_session": "test_replacement_commands_rebind_when_they_succeed",
+    "test_should_get_last_assistant_text": "test_get_last_assistant_text",
+    "test_should_get_session_entries_with_since_cursor": "test_get_entries_returns_only_what_follows_since",
+    "test_should_get_session_tree": "test_get_tree_reports_the_leaf",
+    "test_should_set_and_get_session_name": "test_set_session_name_trims_and_applies",
+}
+"""Which credential-free case pins each credential-gated one.
+
+The rest (`save_messages_to_session_file`, `manual_compaction`,
+`bash_output_in_llm_context`, `session_stats`, `export_to_html`,
+`retain_pre_compaction_entries`) assert on what a *real model* produced, so
+they have no faux-provider equivalent.
+"""
+
+
+def test_every_covered_case_names_a_real_test() -> None:
+    """A stale mapping is worse than none: it claims coverage that moved away."""
+    import ast
+    from pathlib import Path
+
+    suite = Path(__file__).resolve().parent / "suite" / "test_rpc_mode.py"
+    tree = ast.parse(suite.read_text(encoding="utf-8"))
+    defined = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef | ast.FunctionDef) and node.name.startswith("test_")
+    }
+
+    missing = sorted(name for name in COVERED_BY.values() if name not in defined)
+    assert missing == [], f"COVERED_BY points at tests that no longer exist: {missing}"
+
+    documented = {name for name in globals() if name.startswith("test_should_")}
+    unknown = sorted(set(COVERED_BY) - documented)
+    assert unknown == [], f"COVERED_BY names cases that are not in this file: {unknown}"
+
+
+_skip_credential_gated = pytest.mark.skip(reason=_REASON)
+"""Applied to the `test_should_*` stubs at the end of this module.
+
+Not a module-level `pytestmark`: that would also skip the guard below, and a
+mapping nobody checks is exactly how it goes stale.
+"""
 
 
 def test_should_get_state() -> None:
@@ -128,3 +170,8 @@ def test_should_set_and_get_session_name() -> None:
     """`sessionName` undefined initially; after `setSessionName("my-test-session")`
     `getState().sessionName` matches, and the session file gains exactly one
     `type == "session_info"` entry with that `name`."""
+
+
+for _name, _case in list(globals().items()):
+    if _name.startswith("test_should_"):
+        _case.pytestmark = [_skip_credential_gated]

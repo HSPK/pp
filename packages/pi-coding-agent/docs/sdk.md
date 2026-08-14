@@ -958,7 +958,7 @@ Unavailable in this Python port. Legacy stdio RPC is superseded by the `pi_serve
 
 ## RPC Mode Alternative
 
-For subprocess-based integration, do not use `pp --mode rpc`; it intentionally reports that legacy stdio RPC is not ported.
+For subprocess-based integration, use `pp --mode rpc`; see [rpc-stdio.md](rpc-stdio.md).
 
 Use one of these instead:
 

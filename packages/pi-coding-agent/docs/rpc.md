@@ -1,8 +1,19 @@
-# RPC Mode
+# Socket RPC Mode
 
-The TypeScript stdio JSONL RPC mode (`pi --mode rpc`) is **not available in this Python port**. The CLI accepts `--mode rpc` only to report the incompatibility and exit.
+This port has two RPC surfaces:
 
-For programmatic control, use the ported socket stack instead:
+- **Stdio JSONL** (`pp --mode rpc`) — the port of the TypeScript RPC mode. One
+  session, driven by whichever process spawned the agent. Documented in
+  [rpc-stdio.md](rpc-stdio.md).
+- **Unix socket** — a CBOR protocol with multiple clients, durable sessions and
+  session leases. Documented here.
+
+Choose stdio when your host can spawn a subprocess and wants one session.
+Choose the socket stack when several clients share sessions, or the agent has
+to outlive its caller. If you are embedding pi in the same Python process, skip
+both and use the SDK in [sdk.md](sdk.md).
+
+The socket stack is:
 
 - `pi_protocol` validates and frames CBOR messages.
 - `pi_server` serves durable sessions over a Unix-domain socket.
@@ -10,16 +21,9 @@ For programmatic control, use the ported socket stack instead:
 - `pi_coding_agent.core.agent_session_runtime.PiAgentSessionRuntimeService` adapts the real coding-agent session runtime to `pi_server`.
 - `pi_coding_agent.client.remote_session.RemoteSession` is a higher-level single-session client wrapper.
 
-If you are embedding pi in the same Python process, prefer the SDK in [sdk.md](sdk.md). If you need process isolation or multiple clients, use the socket stack documented here.
+Everything below describes the socket protocol.
 
-## Starting RPC Mode
-
-Legacy stdio RPC is not ported:
-
-```bash
-uv run pp --mode rpc
-# stderr: RPC mode is not ported; use the pi_server/pi_client socket stack instead.
-```
+## Starting the socket server
 
 The socket server is currently a library API, not an installed console script. Start it by composing `PiAgentSessionRuntimeService` with a Unix listener:
 
@@ -88,7 +92,7 @@ Common CLI commands in this Python port:
 - `uv run pp "prompt"` or `uv run pp -p "prompt"`: single-shot print mode.
 - `uv run pp --mode json "prompt"`: newline-delimited JSON event output for one local process.
 - `uv run pp` on a TTY: interactive mode.
-- `uv run pp --mode rpc`: not ported; use the socket stack above.
+- `uv run pp --mode rpc`: stdio JSONL RPC, see [rpc-stdio.md](rpc-stdio.md).
 
 ## Protocol Overview
 
@@ -111,7 +115,7 @@ Each protocol message is:
 
 The default maximum payload length is `pi_protocol.DEFAULT_MAX_FRAME_LENGTH` (16 MiB). `FrameDecoder`, `ClientMessageDecoder`, and `ServerMessageDecoder` incrementally decode arbitrary byte chunks.
 
-`pi_coding_agent.modes.rpc.JsonlLineReader` is ported only as the strict LF-only helper used by tests for the unported legacy stdio mode. It is not a working RPC driver.
+`pi_coding_agent.modes.rpc.JsonlLineReader` is the strict LF-only reader for the stdio RPC mode, not for this socket protocol; socket frames are length-prefixed CBOR.
 
 ## Commands
 
@@ -181,7 +185,7 @@ async def abort_session(session: object) -> None:
 
 #### new_session
 
-Legacy stdio `new_session` is unavailable. Use the socket `create` command or `PiClient.create_session()` to create a new durable session.
+The socket protocol has no `new_session` command. Use `create` or `PiClient.create_session()` to create a new durable session. (Stdio RPC does have `new_session`; see [rpc-stdio.md](rpc-stdio.md).)
 
 ```json
 {"command": "create", "cwd": "/path/to/project", "name": "my-session"}
@@ -488,7 +492,7 @@ Progress variants:
 
 ## Extension UI Protocol
 
-The legacy stdio extension UI sub-protocol is not available in this Python port. Python extensions keep a headless-safe `ExtensionUIContext` subset for in-process use, but no socket-level UI dialog protocol is exposed.
+This socket protocol exposes no extension UI dialog sub-protocol. Stdio RPC does, over `extension_ui_request` / `extension_ui_response` line pairs; see [rpc-stdio.md](rpc-stdio.md).
 
 ### Extension UI Requests (stdout)
 

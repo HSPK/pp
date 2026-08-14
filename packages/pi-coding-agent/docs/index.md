@@ -56,7 +56,8 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 ## Programmatic usage
 
 - [SDK](sdk.md) - embed pi in Python applications.
-- [RPC mode](rpc.md) - integrate with the ported Unix-socket `pi_server` / `pi_client` stack.
+- [Stdio RPC mode](rpc-stdio.md) - drive the agent as a subprocess over JSON lines on stdin/stdout.
+- [Socket RPC mode](rpc.md) - integrate with the Unix-socket `pi_server` / `pi_client` stack.
 - [JSON event stream mode](json.md) - print mode with structured events.
 - [TUI components](tui.md) - build custom terminal UI for extensions.
 

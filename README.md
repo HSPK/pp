@@ -165,9 +165,6 @@ decision with a reason, not an oversight:
   stack; **OpenAI Codex** (`openai-codex-responses`) needs its OAuth/WebSocket
   transport. Both providers are still in the model catalog, so their models are
   discoverable; streaming raises `NotImplementedError`.
-- **The legacy stdio RPC mode.** Superseded by the `pi_server`/`pi_client`
-  socket stack, which is ported. Its strict LF-only JSONL framing *is* ported and
-  tested. `--mode rpc` reports the incompatibility and exits.
 - **The HTML exporter's document assembly**, which embeds vendored
   `marked`/`highlight.js` browser bundles. Its ANSI-to-HTML converter and colour
   maths are ported and cross-checked. `--export` reports this and exits.

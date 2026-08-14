@@ -6,7 +6,7 @@ uv run --project /path/to/pp pp --mode json "Your prompt"
 
 Outputs all session events as JSON lines to stdout. Useful for integrating pi into other tools or custom UIs.
 
-The legacy stdio `--mode rpc` is not ported in Python; use the `pi_server` / `pi_client` Unix-socket stack instead.
+For a bidirectional protocol rather than a one-way event stream, see [stdio RPC mode](rpc-stdio.md) or the [Unix-socket stack](rpc.md).
 
 ## Event Types
 

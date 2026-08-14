@@ -127,7 +127,7 @@ Before the trust decision, pi loads only context files, user/global extensions, 
 
 Non-interactive modes (`-p` and `--mode json`) do not show a trust prompt. Without an applicable saved trust decision, they use `defaultProjectTrust` from global settings: `ask` (default) and `never` ignore those project resources, while `always` trusts them. Pass `--approve`/`-a` or `--no-approve`/`-na` to override project trust for one run.
 
-The legacy stdio `--mode rpc` is accepted by the argument parser but is not ported; use the `pi_server` / `pi_client` socket stack instead.
+The stdio `--mode rpc` protocol drives the agent from a host process over JSON lines; see [rpc-stdio.md](rpc-stdio.md). For multi-client access over a Unix socket, see [rpc.md](rpc.md).
 
 `pp config` and package commands use saved/default project trust without an interactive prompt. Pass `--approve` to trust project-local settings for one command or `--no-approve` to ignore them. `pp update` uses only an explicit flag or a saved trust decision.
 
@@ -167,7 +167,7 @@ See [Pi Packages](packages.md) for package sources and security notes.
 | default | Interactive mode |
 | `-p`, `--print` | Print response and exit |
 | `--mode json` | Output all events as JSON lines; see [JSON mode](json.md) |
-| `--mode rpc` | Accepted but not ported; exits with an error |
+| `--mode rpc` | Headless JSON-line protocol on stdin/stdout |
 | `--export <file>` | Parsed but not currently handled by the CLI |
 
 In print mode, pi also reads piped stdin and merges it into the initial prompt:

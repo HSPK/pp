@@ -28,7 +28,7 @@ Declining trust skips protected resources. Context files such as `AGENTS.overrid
 
 Non-interactive modes (`-p` and `--mode json`) do not show a trust prompt. Without an applicable saved trust decision, `defaultProjectTrust: "ask"` and `"never"` ignore such resources, while `"always"` trusts them. Use `--approve`/`-a` or `--no-approve`/`-na` to override project trust for one run.
 
-The legacy stdio `--mode rpc` is not ported in Python.
+The stdio `--mode rpc` protocol takes over stdout and reads commands from stdin; treat whatever writes to that stdin as fully trusted, since it can run bash and switch sessions.
 
 ## No Built-in Sandbox
 
