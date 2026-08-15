@@ -1,6 +1,6 @@
 [project]
 name = "pp-rpc-client"
-version = "0.1.0"
+version = "0.2.0"
 description = "Transport-neutral client for remote pi sessions over framed CBOR bytes (Python port of @earendil-works/pi-client)"
 readme = "README.md"
 license = "MIT"
@@ -21,7 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "pp-rpc-protocol==0.1.0",
+    "pp-rpc-protocol==0.2.0",
 ]
 
 [project.urls]

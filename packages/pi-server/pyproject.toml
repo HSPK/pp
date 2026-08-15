@@ -1,6 +1,6 @@
 [project]
 name = "pp-rpc-server"
-version = "0.1.0"
+version = "0.2.0"
 description = "Experimental RPC server for remote pi sessions over framed CBOR bytes (Python port of @earendil-works/pi-server)"
 readme = "README.md"
 license = "MIT"
@@ -21,9 +21,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "pp-rpc-protocol==0.1.0",
-    "pp-agent-core==0.1.0",
-    "pp-ai==0.1.0",
+    "pp-rpc-protocol==0.2.0",
+    "pp-agent-core==0.2.0",
+    "pp-ai==0.2.0",
 ]
 
 [project.urls]

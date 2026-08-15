@@ -1,6 +1,6 @@
 [project]
 name = "pp-telemetry"
-version = "0.1.0"
+version = "0.2.0"
 description = "Vendor-neutral telemetry contracts and typed schema utilities for pi (Python port of @earendil-works/pi-telemetry)"
 readme = "README.md"
 license = "MIT"

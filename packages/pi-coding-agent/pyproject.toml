@@ -1,6 +1,6 @@
 [project]
 name = "pp-coding-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "Coding agent CLI with read, bash, edit, write tools and session management (Python port of @earendil-works/pi-coding-agent)"
 readme = "README.md"
 license = "MIT"
@@ -24,13 +24,13 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "pp-ai==0.1.0",
-    "pp-agent-core==0.1.0",
-    "pp-tui==0.1.1",
-    "pp-rpc-protocol==0.1.0",
-    "pp-rpc-client==0.1.0",
-    "pp-rpc-server==0.1.0",
-    "pp-telemetry==0.1.0",
+    "pp-ai==0.2.0",
+    "pp-agent-core==0.2.0",
+    "pp-tui==0.2.0",
+    "pp-rpc-protocol==0.2.0",
+    "pp-rpc-client==0.2.0",
+    "pp-rpc-server==0.2.0",
+    "pp-telemetry==0.2.0",
     "pyyaml>=6.0",
     "jsonschema>=4.23",
     "pillow>=11.0",
