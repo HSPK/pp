@@ -1,274 +1,797 @@
-# pp
+# pi-coding-agent
 
-A Python port of [pi](https://github.com/earendil-works/pi), a coding agent that
-runs in your terminal.
+Python port of pi's terminal coding harness. The installed CLI entry point is
+`pp`; the lower-level OAuth helper is `pp-ai`; evals run with `pp-evals`.
+The package requires Python >= 3.11 and is developed as a uv workspace.
 
-## What pi is
+Pi is a minimal terminal coding harness. Adapt pi to your workflows without
+forking internals. Extend it with Python [Extensions](#extensions), [Skills](#skills),
+[Prompt Templates](#prompt-templates), and [Themes](#themes). Bundle those
+resources in [Pi Packages](#pi-packages) and share them by git or local path.
 
-pi is a coding agent harness. You give it a prompt; it reads files, runs
-commands, edits code and writes new files to carry it out. It ships as a
-terminal UI with a scrollback or fullscreen mode, a session store that records
-every turn as an append-only log you can branch and resume, and an extension
-system for adding your own commands, tools and themes.
+Pi ships with useful defaults but keeps the core small. It runs in interactive
+TUI mode, print mode, JSON event mode, a Python SDK, the stdio JSONL RPC mode,
+and a Unix-socket RPC stack.
 
-It talks to models through a provider layer rather than a single vendor SDK, so
-Anthropic, OpenAI, Google, GitHub Copilot, OpenRouter and OpenAI-compatible
-gateways all work through the same interface, with OAuth or API-key auth per
-provider.
+## Share your OSS coding agent sessions
 
-One detail worth knowing, because it explains a design choice throughout: pi can
-answer questions about itself. There is no retrieval index behind that. The
-system prompt names absolute paths to this package's `README.md`, `docs/` and
-`examples/` plus a map from topic to filename, and the agent opens those real
-files with its ordinary read tool. The documentation is a functional part of the
-product, not decoration.
+Sessions are stored as JSONL files, so external tooling can process them. The
+TypeScript README's `pi-share-hf` workflow is not part of this Python port.
 
-## This port
+## Table of Contents
 
-This repository is a Python implementation of that TypeScript project. It is a
-port, not a rewrite: the goal is that a given input produces the same observable
-behaviour as upstream, down to error strings and on-disk formats.
+- [Quick Start](#quick-start)
+- [Providers & Models](#providers--models)
+- [Interactive Mode](#interactive-mode)
+  - [Editor](#editor)
+  - [Commands](#commands)
+  - [Keyboard Shortcuts](#keyboard-shortcuts)
+  - [Message Queue](#message-queue)
+- [Sessions](#sessions)
+  - [Branching](#branching)
+  - [Compaction](#compaction)
+- [Settings](#settings)
+- [Context Files](#context-files)
+- [Customization](#customization)
+  - [Prompt Templates](#prompt-templates)
+  - [Skills](#skills)
+  - [Extensions](#extensions)
+  - [Themes](#themes)
+  - [Pi Packages](#pi-packages)
+- [Programmatic Usage](#programmatic-usage)
+- [Philosophy](#philosophy)
+- [CLI Reference](#cli-reference)
 
-| TypeScript package | PyPI distribution | Directory | Import module |
-| --- | --- | --- | --- |
-| `@earendil-works/pi-telemetry` | `pp-telemetry` | `packages/pi-telemetry` | `pi_telemetry` |
-| `@earendil-works/pi-ai` | `pp-ai` | `packages/pi-ai` | `pi_ai` |
-| `@earendil-works/pi-agent-core` | `pp-agent-core` | `packages/pi-agent` | `pi_agent` |
-| `@earendil-works/pi-tui` | `pp-tui` | `packages/pi-tui` | `pi_tui` |
-| `@earendil-works/pi-protocol` | `pp-rpc-protocol` | `packages/pi-protocol` | `pi_protocol` |
-| `@earendil-works/pi-client` | `pp-rpc-client` | `packages/pi-client` | `pi_client` |
-| `@earendil-works/pi-server` | `pp-rpc-server` | `packages/pi-server` | `pi_server` |
-| `@earendil-works/pi` (coding agent) | `pp-coding-agent` | `packages/pi-coding-agent` | `pi_coding_agent` |
-| `@earendil-works/pi-evals` | `pp-evals` | `packages/pi-evals` | `pi_evals` |
+---
 
-The three names that differ from a mechanical translation do so because the
-obvious name was already taken on PyPI by an unrelated project: `pi-agent` and
-`pi-coding-agent` belong to other authors, and `pp-server` is
-[`pp.server`](https://pypi.org/project/pp.server/), an actively maintained
-package. `pp-rpc-protocol`/`pp-rpc-client`/`pp-rpc-server` are named as a set
-because they are one stack: framed CBOR over a Unix socket.
+## Quick Start
 
-Import modules deliberately keep their `pi_*` spelling. They name what the code
-*is* — a port of pi — and every module docstring, test and porting convention
-refers to them.
-
-## Install
+From a source checkout:
 
 ```bash
-pip install pp-coding-agent   # or: uv tool install pp-coding-agent
-pp                            # start the agent
+uv sync --all-packages
+uv run pp --help
 ```
 
-The nine distributions are released in lockstep: they always share one version,
-and each pins its siblings with `==`. Installing `pp-coding-agent` pulls the
-whole stack.
-
-Requires Python 3.11+. The workspace is managed with
-[uv](https://docs.astral.sh/uv/).
+From an installed wheel or package index:
 
 ```bash
-uv sync --all-packages                # install workspace + dev tools
-uv run pp                             # start the agent (interactive)
-uv run pp "explain this repo"         # run a single prompt
-uv run pp --list-models               # what the provider layer can reach
-uv run pp-ai login anthropic          # authenticate a provider
-uv run pp-evals --provider openai --model gpt-5.6-sol
+python -m pip install pi-coding-agent
+pp --help
 ```
 
-Documentation lives in `packages/pi-coding-agent/docs/` — extensions, custom
-providers, session format, settings, keybindings, the SDK and the TUI.
-
-## Development
+Authenticate with an API key:
 
 ```bash
-uv run pytest                         # the whole suite
-uv run pytest packages/pi-ai          # one package
-uv run ruff check packages/           # lint
-uv run ruff format packages/          # format
-./check.sh                            # lint + format check + tests + coverage
+export ANTHROPIC_API_KEY=sk-ant-...
+uv run pp
 ```
 
-`scripts/check_test_parity.py` indexes which upstream test files have a Python
-counterpart. Treat it as an index, not a verdict — it matches filenames in
-docstrings and cannot tell a faithful port from a weakened one. Reading the two
-files side by side is the only real check.
+Or use interactive login:
 
-## Releasing
+```text
+/login  # Then select provider
+```
 
-All nine distributions share one version and pin each other with `==`. Two
-checks in `check.sh` enforce the properties that a workspace install otherwise
-hides:
+Then talk to pi. By default, pi gives the model four tools: `read`, `bash`,
+`edit`, and `write`. Additional built-in tools (`grep`, `find`, `ls`) can be
+enabled with `--tools`.
 
-- `scripts/set_version.py --check` — every package declares the same version,
-  and no internal dependency is left unpinned. An unpinned sibling is not a
-  style problem: `[tool.uv.sources]` does not survive into a wheel, so
-  `Requires-Dist: pp-ai` would be resolved from PyPI at install time.
-- `scripts/check_dependencies.py` — every cross-package import is declared.
-  `uv sync --all-packages` puts all nine on `sys.path`, so an undeclared
-  sibling import passes the whole test suite and only fails for the end user.
+**Platform notes:** [Windows](docs/windows.md) | [Termux (Android)](docs/termux.md) | [tmux](docs/tmux.md) | [Terminal setup](docs/terminal-setup.md) | [Shell aliases](docs/shell-aliases.md)
 
-To cut a release:
+---
+
+## Providers & Models
+
+The Python port ships a static built-in model catalog and reads custom overlays
+from `~/.pi/agent/models.json`. Remote model-catalog refresh and `pp update
+--models` are not ported.
+
+**OAuth login is ported for:**
+
+- Anthropic
+- GitHub Copilot
+- Kimi For Coding
+- OpenRouter
+- Radius
+- xAI
+
+**API-key providers in the catalog:**
+
+- Amazon Bedrock
+- Ant Ling
+- Anthropic
+- Azure OpenAI
+- Baseten
+- Cerebras
+- Cloudflare AI Gateway
+- Cloudflare Workers AI
+- DeepSeek
+- Fireworks
+- GitHub Copilot
+- Google
+- Google Vertex AI
+- Groq
+- Hugging Face
+- Kimi For Coding
+- MiniMax
+- MiniMax CN
+- Mistral
+- Moonshot AI
+- Moonshot AI CN
+- NVIDIA
+- OpenAI
+- OpenAI Codex
+- OpenCode Zen
+- OpenCode Go
+- OpenRouter
+- Qwen Token Plan
+- Qwen Token Plan CN
+- Qwen Token Plan Individual
+- Radius
+- Together
+- Vercel AI Gateway
+- xAI
+- Xiaomi
+- Xiaomi Token Plan AMS
+- Xiaomi Token Plan CN
+- Xiaomi Token Plan SGP
+- Z.AI
+- Z.AI Coding CN
+
+Amazon Bedrock and OpenAI Codex models remain discoverable, but their streaming
+APIs are not ported and raise `NotImplementedError` when used.
+
+Select a model with `/model` in the TUI, or use CLI options:
 
 ```bash
-git switch -c release-0.2.0
-python scripts/set_version.py 0.2.0   # rewrites all 9 versions and every == pin
-uv lock && uv sync --all-packages
-./check.sh
-git commit -am "release 0.2.0"
-git push -u origin release-0.2.0
-gh pr create --fill                   # ci.yml must pass before it can merge
-gh pr merge --squash
-
-git switch main && git pull
-git tag v0.2.0 && git push origin v0.2.0
+uv run pp --provider anthropic --model claude-sonnet-4-5
+uv run pp --model anthropic/claude-sonnet-4-5
+uv run pp --model claude-sonnet-4-5:high
+uv run pp --list-models sonnet
 ```
 
-`main` is protected: it takes commits through pull requests only, and a pull
-request cannot merge until `ci.yml` is green. The tag goes on `main` *after*
-the merge, because the tag is what publishes.
+Custom providers can be added in `~/.pi/agent/models.json` when they use a
+ported API shape (`openai-completions`, `openai-responses`,
+`anthropic-messages`, or `google-generative-ai`). See [docs/models.md](docs/models.md)
+and [docs/custom-provider.md](docs/custom-provider.md).
 
-Pushing the tag runs `.github/workflows/release.yml`, which builds all nine
-distributions and publishes them to PyPI through Trusted Publishing (OIDC), in
-dependency order. No API token is stored in this repository: PyPI is configured
-to trust that one workflow file, and mints a short-lived token per upload. The
-upload order is not cosmetic — the packages pin each other with `==`, so a
-dependency has to land before the package requiring it. Once every upload has
-landed, the workflow creates a GitHub Release for the tag carrying the same
-wheels and sdists.
+The llama.cpp local-model extension from the TypeScript package is not ported.
 
-Version numbering is the port's own. `UPSTREAM_VERSION` in
-`pi_coding_agent.core.config` records which upstream release the behaviour is
-aligned with, because this port deliberately omits the features listed below.
+---
 
-## What is not ported
+## Interactive Mode
 
-Behaviour that upstream has and this port does not. Each entry is a deliberate
-decision with a reason, not an oversight:
+Run `pp` on a TTY with no `-p` flag to start the interactive TUI.
 
-- **Node's `fs.watch`**, which has no standard-library equivalent; the git
-  branch watcher polls instead, with the same debounce and callback contract.
-- **Mermaid diagram rendering**, which renders through the `grok-mermaid` npm
-  package.
-- **The `/arminsayshi` and `/dementedelves` easter eggs** and the announcement
-  banner, which are bundled ASCII-art animations and a PNG asset.
-- **Most of the extension UI host**: widgets and the select/confirm/input
-  dialogs, footer statuses, terminal title and the tools-expanded toggle *are*
-  wired; custom header/footer components, terminal input listeners,
-  working-indicator control, editor control, autocomplete providers and the
-  theme accessors are not. The startup resource/diagnostic report is not
-  ported either.
-- **Extension provider registration** (`registerProvider`/`unregisterProvider`)
-  and the **remote model catalog** (`refreshModels`, `ModelsPublication`), which
-  together form a dynamic catalog layer this port does not implement. Providers
-  come from the built-in set plus `models.json`; see `docs/custom-provider.md`.
-- **AWS Bedrock** (`bedrock-converse-stream`) needs SigV4 signing and the Smithy
-  stack; **OpenAI Codex** (`openai-codex-responses`) needs its OAuth/WebSocket
-  transport. Both providers are still in the model catalog, so their models are
-  discoverable; streaming raises `NotImplementedError`.
-- **The HTML exporter's document assembly**, which embeds vendored
-  `marked`/`highlight.js` browser bundles. Its ANSI-to-HTML converter and colour
-  maths are ported and cross-checked. `--export` reports this and exits.
-- **npm-sourced packages** in the package manager (no Python registry
-  equivalent); git and local-path sources are ported.
-- **Install-method detection and self-update.** Upstream inspects its own
-  npm/pnpm/yarn/bun install layout to update itself; a `uv`/`pip` install has no
-  equivalent story.
+The interface from top to bottom:
 
-## How the port is verified
+- **Startup header** - Shows shortcuts, context files, prompt templates,
+  skills, and extensions
+- **Messages** - User messages, assistant responses, tool calls and results,
+  notifications, errors, and generic custom entries
+- **Editor** - Where you type; border color indicates thinking level
+- **Footer** - Working directory, branch, token usage, context usage, current
+  model, and extension status text
 
-Verification is anchored on upstream artifacts wherever they exist rather than
-on the port agreeing with itself:
+Both TUI modes are ported: `regular` and `fullscreen`. Runtime switching between
+them is not ported; changing the setting applies on the next start.
 
-- TypeScript test cases are ported alongside the code they cover.
-- The session layer runs the upstream conformance suite against both the
-  in-memory and JSONL stores.
-- `short_hash` was compared byte for byte against the JavaScript implementation.
-- The CBOR codec is tested against the RFC 8949 Appendix A vectors.
-- `diff_words` is diff-tested against the real `diff` npm package at the exact
-  version upstream pins (8.0.4), and `render_diff` against the upstream
-  `diff.ts` executed under Node; both corpora are checked in under
-  `packages/pi-coding-agent/tests/data/`.
-- `format_tokens`, `format_cwd_for_footer`, `sanitize_status_text` and the JS
-  `toFixed` emulation were compared against the TypeScript running under Node.
-- The provider adapters are driven by SSE fixtures over a real loopback socket,
-  not only by mocked transports.
-- The CLI argument scanner and the JSONL framing were cross-checked by running
-  the actual TypeScript implementations under Node and comparing every field of
-  the output, case by case.
-- The RPC stack is exercised end to end: the real server, driven by the real
-  coding-agent session runtime, against the real client over a Unix socket.
-- Extension loading is tested against real extension files written to a temp
-  directory, including the refusal to load project-local extensions from an
-  untrusted project.
-- `scripts/fake_openai_server.py` serves a scripted OpenAI-compatible endpoint so
-  the installed `pp` binary can be smoke tested end to end without an API key.
+Extension widgets, custom header/footer/editor replacement, extension-driven
+dialogs, and terminal input listeners from the TypeScript UI host are not ported.
+
+### Editor
+
+| Feature | How |
+|---------|-----|
+| File reference | Type `@` to fuzzy-search project files |
+| Path completion | Tab completion is provided by the TUI editor |
+| Multi-line | Use the configured TUI newline keybinding |
+| External editor | Ctrl+G opens `externalEditor`, `$VISUAL`, `$EDITOR`, Notepad on Windows, or `nano` elsewhere |
+| Clipboard | Ctrl+V pastes image/text on Unix-like systems; Alt+V on Windows |
+| Bash commands | `!command` runs and sends output to the model, `!!command` runs without sending |
+
+Standard editing keybindings are loaded from `~/.pi/agent/keybindings.json`.
+See [docs/keybindings.md](docs/keybindings.md).
+
+### Commands
+
+Type `/` in the editor to trigger commands. Extensions can register custom
+commands, skills are available as `/skill:name`, and prompt templates expand as
+`/templatename`.
+
+| Command | Description |
+|---------|-------------|
+| `/login`, `/logout` | Manage provider credentials |
+| `/model` | Switch models |
+| `/scoped-models` | Enable/disable models for Ctrl+P cycling |
+| `/settings` | Thinking level, theme, message delivery, transport |
+| `/resume` | Pick from previous sessions |
+| `/new` | Start a new session |
+| `/name <name>` | Set session display name |
+| `/session` | Show session info |
+| `/tree` | Jump to any point in the session and continue from there |
+| `/trust` | Save project trust decision for future sessions |
+| `/fork` | Create a new session from a previous user message |
+| `/clone` | Duplicate the current active branch into a new session |
+| `/compact [prompt]` | Manually compact context, optional custom instructions |
+| `/copy` | Copy last assistant message to clipboard |
+| `/export [file]` | Export session; JSONL works, HTML export is not ported |
+| `/import <file>` | Import and resume a session from a JSONL file |
+| `/share` | Starts gist sharing, but fails because HTML document assembly is not ported |
+| `/reload` | Reload keybindings, extensions, skills, prompts, themes, and context files |
+| `/hotkeys` | Show all keyboard shortcuts |
+| `/changelog` | Display version history |
+| `/quit` | Quit pi |
+
+### Keyboard Shortcuts
+
+See `/hotkeys` for the full list. Customize via `~/.pi/agent/keybindings.json`.
+
+**Commonly used:**
+
+| Key | Action |
+|-----|--------|
+| Ctrl+C | Clear editor |
+| Ctrl+D | Exit when editor is empty |
+| Escape | Cancel/abort |
+| Ctrl+L | Open model selector |
+| Ctrl+P / Shift+Ctrl+P | Cycle scoped models forward/backward |
+| Shift+Tab | Cycle thinking level |
+| Ctrl+O | Collapse/expand tool output |
+| Ctrl+T | Collapse/expand thinking blocks |
+| Ctrl+X | Copy message to clipboard |
+| Alt+Enter | Queue follow-up message |
+| Alt+Up | Restore queued messages |
+
+### Message Queue
+
+Submit messages while the agent is working:
+
+- **Enter** queues a steering message, delivered after the current assistant
+  turn finishes its tool calls
+- **Alt+Enter** queues a follow-up message, delivered after the agent finishes
+  all current work
+- **Escape** aborts and restores queued messages to the editor
+- **Alt+Up** retrieves queued messages back to the editor
+
+Configure delivery in [settings](docs/settings.md): `steeringMode` and
+`followUpMode` can be `"one-at-a-time"` or `"all"`. `transport` selects
+provider transport preference (`"sse"`, `"websocket"`, `"websocket-cached"`,
+or `"auto"`) where supported.
+
+---
+
+## Sessions
+
+Sessions are JSONL files with a tree structure. Each entry has an `id` and
+`parentId`, enabling in-place branching without creating new files. See
+[docs/session-format.md](docs/session-format.md).
+
+### Management
+
+Sessions auto-save to `~/.pi/agent/sessions/` organized by working directory.
+
+```bash
+uv run pp -c                  # Continue most recent session
+uv run pp -r                  # Browse and select from past sessions
+uv run pp --no-session        # Ephemeral mode
+uv run pp --name "my task"    # Set session display name at startup
+uv run pp --session <path|id> # Use specific session file or ID
+uv run pp --fork <path|id>    # Fork a session file or ID into a new session
+```
+
+Use `/session` in interactive mode to see the current session ID before reusing
+it with `--session <id>` or `--fork <id>`.
+
+### Branching
+
+**`/tree`** - Navigate the session tree in-place. Select any previous point,
+continue from there, and switch between branches. All history is preserved in a
+single file.
+
+- Search by typing, fold/unfold and jump between branches with Ctrl+Left/Ctrl+Right or Alt+Left/Alt+Right
+- Filter modes: default, no-tools, user-only, labeled-only, all
+- Press Ctrl+X to copy the selected message
+- Press Shift+L to label entries and Shift+T to toggle label timestamps
+
+**`/fork`** creates a new session file from a previous user message on the
+active branch.
+
+**`/clone`** duplicates the current active branch into a new session file at the
+current position.
+
+**`--fork <path|id>`** forks an existing session file or partial session UUID
+from the CLI.
+
+### Compaction
+
+Long sessions can exhaust context windows. Compaction summarizes older messages
+while keeping recent ones.
+
+**Manual:** `/compact` or `/compact <custom instructions>`
+
+**Automatic:** Enabled by default. It triggers on context overflow or near the
+context limit. Configure via `/settings` or `settings.json`.
+
+Compaction is lossy. The full history remains in the JSONL file; use `/tree` to
+revisit it. Extension hooks for custom compaction are ported. See
+[docs/compaction.md](docs/compaction.md).
+
+---
+
+## Settings
+
+Use `/settings` to modify common options, or edit JSON files directly:
+
+| Location | Scope |
+|----------|-------|
+| `~/.pi/agent/settings.json` | Global |
+| `.pi/settings.json` | Project, loaded only when the project is trusted |
+
+Important settings keys include `defaultProvider`, `defaultModel`,
+`defaultThinkingLevel`, `steeringMode`, `followUpMode`, `transport`,
+`externalEditor`, `defaultProjectTrust`, `enableInstallTelemetry`,
+`versionCheckPackage`, `tuiMode`, `fullscreenExitOutput`, `fullscreenScrollbar`,
+`enabledModels`, `images.autoResize`, and `images.blockImages`.
+
+The `markdown.mermaid` setting exists, but Mermaid diagram rendering is not
+ported.
+
+See [docs/settings.md](docs/settings.md) for all options.
+
+### Project Trust
+
+On interactive startup, pi asks before trusting a project folder that contains
+project-local settings, resources, or project `.agents/skills` and has no saved
+decision for the folder or a parent folder in `~/.pi/agent/trust.json`.
+Trusting a project allows pi to load `.pi/settings.json`, `.pi` resources, and
+project extensions.
+
+Non-interactive modes (`-p` and `--mode json`) do not show a trust prompt.
+Without a saved trust decision, they use `defaultProjectTrust`: `ask` and
+`never` ignore project resources; `always` trusts them. Pass `--approve` or
+`--no-approve` to override project trust for one run.
+
+Use `/trust` in interactive mode to save a project trust decision for future
+sessions. It writes `~/.pi/agent/trust.json`; restart pi for newly trusted
+project resources to load.
+
+### Telemetry and update checks
+
+Pi has two separate startup features:
+
+- **Update check:** checks PyPI, not `pi.dev`. Configure the distribution
+  with `PI_VERSION_CHECK_PACKAGE` or `versionCheckPackage`. Disable with
+  `PI_SKIP_VERSION_CHECK=1`.
+- **Install/update telemetry:** controlled by `enableInstallTelemetry` or
+  `PI_TELEMETRY`. This also controls optional provider attribution headers for
+  OpenRouter, Cloudflare, and direct NVIDIA requests.
+
+Use `--offline` or `PI_OFFLINE=1` to disable startup network operations,
+including update checks, package update checks, and install/update telemetry.
+
+---
+
+## Context Files
+
+Pi loads `AGENTS.md` or `CLAUDE.md` at startup from:
+
+- `~/.pi/agent/AGENTS.md`
+- Parent directories, walking up from cwd
+- Current directory
+
+If a directory contains `AGENTS.override.md`, pi loads it instead of
+`AGENTS.md` or `CLAUDE.md` from that directory. Context files from other
+directories are still concatenated.
+
+Disable context file loading with `--no-context-files` or `-nc`.
+
+### System Prompt
+
+Replace the default system prompt with `.pi/SYSTEM.md` or
+`~/.pi/agent/SYSTEM.md`. Append without replacing via `APPEND_SYSTEM.md`.
+
+---
+
+## Customization
+
+### Prompt Templates
+
+Reusable prompts as Markdown files. Type `/name` to expand.
+
+```markdown
+<!-- ~/.pi/agent/prompts/review.md -->
+Review this code for bugs, security issues, and performance problems.
+Focus on: $ARGUMENTS
+```
+
+Place in `~/.pi/agent/prompts/`, `.pi/prompts/`, or a [pi package](#pi-packages).
+See [docs/prompt-templates.md](docs/prompt-templates.md).
+
+### Skills
+
+On-demand capability packages following the Agent Skills layout. Invoke via
+`/skill:name` or let the agent load them automatically.
+
+```markdown
+---
+name: my-skill
+description: Use this skill when the user asks about X.
+---
+
+# My Skill
+
+## Steps
+1. Do this
+2. Then that
+```
+
+Place in `~/.pi/agent/skills/`, `~/.agents/skills/`, `.pi/skills/`, or
+`.agents/skills/` from `cwd` up through parent directories, or in a pi package.
+See [docs/skills.md](docs/skills.md).
+
+### Extensions
+
+Python modules that extend pi with custom tools, commands, and event handlers.
+An extension file exports a callable named `pi_extension`.
+
+```python
+from typing import Any
+
+from pi_agent.types import AgentToolResult, AgentToolUpdateCallback
+from pi_ai.types import TextContent
+from pi_ai.utils.abort import AbortSignal
+from pi_coding_agent.core.extensions import ExtensionAPI, ExtensionContext, ToolDefinition
 
 
+async def echo_tool(
+    tool_call_id: str,
+    params: dict[str, Any],
+    signal: AbortSignal | None,
+    on_update: AgentToolUpdateCallback | None,
+    ctx: ExtensionContext,
+) -> AgentToolResult:
+    text = str(params.get("text", ""))
+    return AgentToolResult(content=[TextContent(text=text)])
 
-## Porting conventions
 
-These rules keep independently ported modules consistent.
+def pi_extension(pi: ExtensionAPI) -> None:
+    pi.register_tool(
+        ToolDefinition(
+            name="echo",
+            label="Echo",
+            description="Echo text back.",
+            parameters={
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+            },
+            execute=echo_tool,
+        )
+    )
+```
 
-**File layout.** A TypeScript file `packages/<pkg>/src/a/b-c.ts` becomes
-`packages/pi-<pkg>/src/pi_<pkg>/a/b_c.py`. Tests live in
-`packages/pi-<pkg>/tests/test_<b_c>.py`.
+The ported extension API supports tool registration, command registration,
+event handlers, extension events, and headless-safe UI methods (`select`,
+`confirm`, `input`, `notify`, `set_status`, `set_title`). Provider registration,
+custom CLI flags, shortcut registration, markdown/message/entry renderer
+registration, and the TypeScript extension UI host are not ported.
 
-**Naming.** `camelCase` becomes `snake_case` for functions, methods, fields and
-locals. Types keep their `PascalCase` names. String literal values that cross
-the wire (event `type` tags, provider field names, JSON keys) keep their exact
-TypeScript spelling — for example the event tag stays `"toolcall_start"` and the
-message role stays `"toolResult"`.
+Place extensions in `~/.pi/agent/extensions/`, `.pi/extensions/`, or a pi
+package. Python package manifests use `pi.json`, not `package.json`. See
+[docs/extensions.md](docs/extensions.md) and [examples/extensions/](examples/extensions/).
 
-**Discriminated unions.** A TypeScript union such as
-`{ type: "text" } | { type: "image" }` becomes one `@dataclass` per variant with
-a `type: Literal[...]` field that has a default, plus a `Union` alias. Dispatch
-on `value.type`, not on `isinstance`, so behaviour matches the original.
+### Themes
 
-**Optional fields.** TypeScript `field?: T` becomes `field: T | None = None`.
-Optional collections that the TypeScript code always treats as "empty when
-absent" become `field(default_factory=list/dict)` instead.
+Built-in themes: `dark`, `light`. Custom theme loading is ported; live
+file-watcher hot reload is not ported.
 
-**Async.** `Promise<T>` becomes `async def -> T`. `AsyncIterable` becomes an
-async generator. `AbortSignal` becomes an `asyncio.Event`-backed
-`pi_ai.utils.abort.AbortSignal`; cancellation of the whole request uses
-`asyncio.CancelledError` semantics on top of it.
+Place themes in `~/.pi/agent/themes/` or provide them through a package. Project
+`.pi/themes/` and package themes are resolved by the package manager; the
+interactive runtime currently initializes built-in and global custom-directory
+themes directly. See [docs/themes.md](docs/themes.md).
 
-**Errors.** A thrown `Error` becomes a domain exception (`ModelsError`,
-`ToolValidationError`, ...) or `ValueError`/`RuntimeError` when the TypeScript
-code threw a bare `Error`. Never swallow an exception that the original
-propagated.
+### Pi Packages
 
-**No JS-only behaviour.** Don't reproduce JavaScript quirks that have no meaning
-in Python (`undefined` vs missing keys, `Object.freeze`). Do reproduce
-behaviour that callers depend on, such as `Date.now()` millisecond timestamps
-(`pi_ai.types.now_ms`).
+Bundle and share extensions, skills, prompts, and themes by git repository or
+local path.
 
-**Docstrings.** Every ported module starts with a docstring naming its
-TypeScript source file. Port the explanatory comments that state *why* code is
-written a certain way; drop comments that only restate the code.
+> **Security:** Pi packages run with full system access. Extensions execute
+> arbitrary Python code, and skills can instruct the model to perform actions.
+> Review third-party code before installing it.
 
-**Dependencies.** Prefer the standard library. Current third-party use:
-`httpx` (HTTP/SSE), `jsonschema` (tool schema validation), `pyyaml`,
-`wcwidth` (terminal width). Do not add a dependency without a concrete need.
+```bash
+uv run pp install git:github.com/user/repo
+uv run pp install git:github.com/user/repo@v1
+uv run pp install https://github.com/user/repo
+uv run pp install ssh://git@github.com/user/repo
+uv run pp install ./local/path
+uv run pp remove git:github.com/user/repo
+uv run pp uninstall ./local/path
+uv run pp list
+uv run pp update
+uv run pp update git:github.com/user/repo
+uv run pp config
+```
 
-## Testing
+Use `-l` or `--local` with `install`, `remove`, or `uninstall` for project-local
+settings. Git packages install to `~/.pi/agent/git/` or `.pi/git/`; local-path
+packages are referenced in place. `npm:` sources, package dependency install,
+self-update, `update --all`, `update --self`, `update --models`, and
+`update --extension` are not ported.
 
-Every ported module needs tests. Tests are written against the Python API and
-must assert real behaviour, not just that a function is callable. Provider
-network calls are exercised against an in-process fake transport, never a real
-endpoint.
+Create a package with a `pi.json` manifest:
 
-## License and attribution
+```json
+{
+  "extensions": ["./extensions"],
+  "skills": ["./skills"],
+  "prompts": ["./prompts"],
+  "themes": ["./themes"]
+}
+```
 
-MIT, the same licence as upstream.
+Without a manifest, pi auto-discovers conventional directories:
+`extensions/`, `skills/`, `prompts/`, and `themes/`. See [docs/packages.md](docs/packages.md).
 
-This project is a derivative work of [pi](https://github.com/earendil-works/pi)
-by Mario Zechner and Earendil Works. The original copyright notice is preserved
-in [LICENSE](LICENSE) alongside the notice for the Python port, and each
-published distribution carries that file and credits the original author in its
-`authors` metadata.
+---
 
-It is an independent port and is not affiliated with or endorsed by the
-upstream project. Bugs found here should be reported to
-[this repository](https://github.com/HSPK/pp/issues), not to upstream, unless
-they are reproducible against the TypeScript implementation.
+## Programmatic Usage
+
+### SDK
+
+```python
+import asyncio
+
+from pi_coding_agent.core.sdk import CreateAgentSessionOptions, create_agent_session
+from pi_coding_agent.core.session_manager import SessionManager
+
+
+async def main() -> None:
+    result = await create_agent_session(CreateAgentSessionOptions(session_manager=SessionManager.in_memory()))
+    try:
+        await result.session.prompt("What files are in the current directory?")
+        print(result.session.get_last_assistant_text())
+    finally:
+        result.session.dispose()
+
+
+asyncio.run(main())
+```
+
+For custom setup, pass `model_runtime`, `settings_manager`, `resource_loader`,
+`custom_tools`, or loaded `extensions` in `CreateAgentSessionOptions`. See
+[docs/sdk.md](docs/sdk.md) and [examples/sdk/](examples/sdk/).
+
+### RPC Mode
+
+`pp --mode rpc` runs the agent headless behind a JSON protocol on
+stdin/stdout: a host writes one command per line and reads responses and events
+back. See [docs/rpc-stdio.md](docs/rpc-stdio.md).
+
+For multi-client access over a Unix socket, the `pi_server` / `pi_client` /
+`pi_protocol` stack is documented in [docs/rpc.md](docs/rpc.md).
+
+---
+
+## Philosophy
+
+Pi is extensible so it does not have to dictate your workflow. Features that
+other tools bake in can be built with extensions, skills, or packages.
+
+**No MCP by default.** Build CLI tools with READMEs or add MCP support through
+an extension.
+
+**No built-in sub-agents.** Spawn pi instances yourself or build the workflow as
+an extension or package.
+
+**No permission popups.** Run in a container or add a confirmation flow through
+an extension.
+
+**No plan mode.** Write plans to files or build plan mode as an extension.
+
+**No built-in to-dos.** Use a TODO file or build a task system as an extension.
+
+**No background bash.** Use tmux for direct observability and control.
+
+---
+
+## CLI Reference
+
+```bash
+pp [options] [@files...] [messages...]
+```
+
+### Package Commands
+
+```bash
+pp install <source> [-l]
+pp remove <source> [-l]
+pp uninstall <source> [-l]
+pp update [source]
+pp list
+pp config
+```
+
+`pp config` and project-local package commands accept `--approve` and
+`--no-approve` for one-command project trust overrides. `pp update` never
+prompts for project trust.
+
+### Modes
+
+| Flag | Description |
+|------|-------------|
+| (default) | Interactive mode on a TTY |
+| `-p`, `--print` | Print response and exit |
+| `--mode json` | Output events as JSON lines |
+| `--mode rpc` | Headless JSON-line protocol on stdin/stdout |
+| `--export <file>` | Parsed; the non-interactive export driver is not wired |
+
+In print mode, pi also reads piped stdin and merges it into the initial prompt:
+
+```bash
+cat README.md | pp -p "Summarize this text"
+```
+
+### Model Options
+
+| Option | Description |
+|--------|-------------|
+| `--provider <name>` | Provider name |
+| `--model <pattern>` | Model pattern or ID; supports `provider/id` and optional `:<thinking>` |
+| `--api-key <key>` | API key for this process |
+| `--thinking <level>` | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
+| `--models <patterns>` | Comma-separated patterns for Ctrl+P cycling |
+| `--list-models [search]` | List available models |
+
+### Session Options
+
+| Option | Description |
+|--------|-------------|
+| `-c`, `--continue` | Continue most recent session |
+| `-r`, `--resume` | Browse and select session |
+| `--session <path\|id>` | Use specific session file or partial UUID |
+| `--session-id <id>` | Use exact project session ID, creating it if missing |
+| `--fork <path\|id>` | Fork session file or partial UUID into a new session |
+| `--session-dir <dir>` | Custom session storage directory |
+| `--no-session` | Ephemeral mode |
+| `--name <name>`, `-n <name>` | Set session display name at startup |
+
+### Tool Options
+
+| Option | Description |
+|--------|-------------|
+| `--tools <list>`, `-t <list>` | Allowlist tool names |
+| `--exclude-tools <list>`, `-xt <list>` | Disable tool names |
+| `--no-builtin-tools`, `-nbt` | Disable built-in tools by default but keep extension/custom tools enabled |
+| `--no-tools`, `-nt` | Disable all tools by default |
+
+Available built-in tools: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`.
+
+### Resource Options
+
+| Option | Description |
+|--------|-------------|
+| `-e`, `--extension <path>` | Load an extension file; repeatable |
+| `--no-extensions`, `-ne` | Disable extension discovery |
+| `--skill <path>` | Load skill file or directory; repeatable |
+| `--no-skills`, `-ns` | Disable skill discovery |
+| `--prompt-template <path>` | Load prompt template file or directory; repeatable |
+| `--no-prompt-templates`, `-np` | Disable prompt template discovery |
+| `--theme <path>` | Load theme file or directory; repeatable |
+| `--no-themes` | Disable theme discovery |
+| `--no-context-files`, `-nc` | Disable context file discovery |
+
+### Other Options
+
+| Option | Description |
+|--------|-------------|
+| `--system-prompt <text>` | Replace default prompt |
+| `--append-system-prompt <text>` | Append text or file contents to the system prompt; repeatable |
+| `--tui-mode <mode>` | `regular` or `fullscreen` |
+| `--verbose` | Force verbose startup |
+| `-a`, `--approve` | Trust project-local files for this run |
+| `-na`, `--no-approve` | Ignore project-local files for this run |
+| `--offline` | Disable startup network operations |
+| `-h`, `--help` | Show help |
+| `-v`, `--version` | Show version |
+
+### File Arguments
+
+Prefix files with `@` to include them in the message:
+
+```bash
+pp @prompt.md "Answer this"
+pp -p @screenshot.png "What's in this image?"
+pp @code.py @test_code.py "Review these files"
+```
+
+### Examples
+
+```bash
+# Interactive with initial prompt
+pp "List all .py files in src/"
+
+# Non-interactive
+pp -p "Summarize this codebase"
+
+# Non-interactive with piped stdin
+cat README.md | pp -p "Summarize this text"
+
+# Named one-shot session
+pp --name "release audit" -p "Audit this repository"
+
+# Different model
+pp --provider openai --model gpt-4o "Help me refactor"
+
+# Model with provider prefix
+pp --model openai/gpt-4o "Help me refactor"
+
+# Model with thinking level shorthand
+pp --model claude-sonnet-4-5:high "Solve this complex problem"
+
+# Limit model cycling
+pp --models "anthropic/*,*sonnet*"
+
+# Read-only mode
+pp --tools read,grep,find,ls -p "Review the code"
+
+# Disable one tool while keeping the rest available
+pp --exclude-tools bash
+
+# High thinking level
+pp --thinking high "Solve this complex problem"
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `PI_CODING_AGENT_DIR` | Override config directory; default `~/.pi/agent` |
+| `PI_PACKAGE_DIR` | Override package directory for README/docs/examples resolution |
+| `PI_OFFLINE` | Disable startup network operations |
+| `PI_SKIP_VERSION_CHECK` | Skip GitHub release update check |
+| `PI_VERSION_CHECK_PACKAGE` | PyPI distribution used for update checks |
+| `PI_TELEMETRY` | Override install/update telemetry and provider attribution headers |
+| `PI_SHARE_VIEWER_URL` | Override share viewer URL prefix |
+| `PI_CLEAR_ON_SHRINK` | Clear terminal when it shrinks if terminal setting is unset |
+| `PI_HARDWARE_CURSOR` | Show hardware cursor if setting is unset |
+| `PI_TIMING` | Print startup timing diagnostics when set to `1` |
+| `VISUAL`, `EDITOR` | External editor fallback |
+
+Commands run by the LLM-callable bash tool also receive current session
+metadata:
+
+| Variable | Description |
+|----------|-------------|
+| `PI_SESSION_ID` | Current session ID |
+| `PI_SESSION_FILE` | Absolute session JSONL path when available |
+| `PI_PROVIDER` | Current model provider |
+| `PI_MODEL` | Current model ID |
+| `PI_REASONING_LEVEL` | Current reasoning level |
+
+See [Environment Variables](docs/environment-variables.md#bash-tool-session-environment).
+
+---
+
+## Contributing & Development
+
+See the repository root README for port status and verification commands. Do
+not confuse that root document with this package-level product manual.
+
+## License
+
+MIT
+
+## See Also
+
+- `pi-ai`: provider registry and LLM API layer; CLI entry point `pp-ai`
+- `pi-agent`: agent loop and session-independent agent types
+- `pi-tui`: terminal UI components
+- `pi-protocol`, `pi-server`, `pi-client`: socket RPC stack
+- `pp-evals`: eval harness; CLI entry point `pp-evals`
+
+---
+
+`pp-coding-agent` is developed in [HSPK/pp](https://github.com/HSPK/pp). It was split out of the `pp` monorepo; sibling packages (`pp-ai`, `pp-agent-core`, `pp-tui`, `pp-coding-agent`, ...) each live in their own
+repository and are consumed from PyPI.

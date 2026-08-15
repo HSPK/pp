@@ -1,4 +1,4 @@
-# Lint, type-shape and test checks.
+# Lint, format and test checks.
 #
 # Runs on pull requests only: `main` is protected and takes commits through
 # PRs, so a push-triggered run would re-test the exact tree the PR already
@@ -24,16 +24,13 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
-      - run: uv sync --all-packages
-
-      # Mirrors check.sh, which is what a contributor runs locally.
-      - name: Version consistency
-        run: uv run python scripts/set_version.py --check
-      - name: Cross-package dependency declarations
-        run: uv run python scripts/check_dependencies.py
+      # `--all-groups`: a package may declare dependency groups beyond `dev`
+      # (pp-rpc-server puts its client-side integration dependency in `test`),
+      # and a plain `uv sync` installs only `dev`, so those tests error out.
+      - run: uv sync --all-groups
       - name: ruff check
-        run: uv run ruff check packages/
+        run: uv run ruff check .
       - name: ruff format --check
-        run: uv run ruff format --check packages/
+        run: uv run ruff format --check .
       - name: pytest
-        run: uv run pytest packages/
+        run: uv run pytest
