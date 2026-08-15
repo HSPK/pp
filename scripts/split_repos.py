@@ -105,6 +105,7 @@ uv.lock
 dist/
 build/
 .scratch/
+sessions/
 *.log
 .env
 """
