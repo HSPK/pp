@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Set or check the workspace-wide version.
+"""Set or check versions and the internal pins that follow them.
 
-The nine `packages/*` distributions are released in lockstep: they always carry
-the same version, and every internal dependency is pinned to `==<version>`
-rather than a range. That pin is not stylistic. `[tool.uv.sources]` entries do
-not survive into a built wheel, so an unpinned `pp-ai` in `Requires-Dist` would
-be resolved from PyPI at install time, and a cross-version combination of these
-packages has never been tested together.
+Every internal dependency is pinned to `==<version>` rather than a range. That
+pin is not stylistic: `[tool.uv.sources]` entries do not survive into a built
+wheel, so an unpinned `pp-ai` in `Requires-Dist` would be resolved from PyPI at
+install time, and a cross-version combination of these packages has never been
+tested together.
 
-Keeping nine `pyproject.toml` files in agreement by hand does not work, so this
-script owns the bump. It is the Python counterpart of the upstream monorepo's
-`scripts/sync-versions.js`.
+The nine distributions used to be released in lockstep, all carrying the same
+version. Now that each one lives in its own repository they are released
+independently, so the invariant this enforces is narrower and truer: **every
+pin must name the version that package actually declares**. Whether two
+packages happen to share a version number is not interesting; whether
+`pp-coding-agent` pins a `pp-tui` that exists is.
 
-    python scripts/set_version.py 0.2.0    # rewrite every version and pin
-    python scripts/set_version.py --check  # verify agreement, exit 1 if not
+    python scripts/set_version.py 0.2.0                  # bump everything
+    python scripts/set_version.py 0.1.1 --package pp-tui # bump one, fix its pins
+    python scripts/set_version.py --check                # verify, exit 1 if not
 
 `--check` runs from `check.sh`, so a hand-edited version that only lands in one
 file fails the normal development loop instead of a release.
@@ -80,13 +83,31 @@ def _rewrite(text: str, new_version: str, pin_re: re.Pattern[str]) -> str:
     return pin_re.sub(rf'"\g<1>=={new_version}"', text)
 
 
-def set_version(new_version: str) -> None:
+def set_version(new_version: str, package: str | None = None) -> None:
     if not VERSION_RE.match(new_version):
         raise SystemExit(f"{new_version!r} is not an accepted version (expected e.g. 0.2.0 or 0.2.0rc1)")
 
     manifests = _package_manifests()
-    pin_re = _pin_re(_internal_names(manifests))
+    names = _internal_names(manifests)
 
+    if package is not None:
+        if package not in names:
+            raise SystemExit(f"{package!r} is not one of {sorted(names)}")
+        # Only this distribution's own version and the pins *on* it move;
+        # everything else keeps whatever version it already declares.
+        pin_re = _pin_re({package})
+        for path in manifests:
+            original = path.read_text(encoding="utf-8")
+            updated = pin_re.sub(rf'"\g<1>=={new_version}"', original)
+            if _distribution_name(original) == package:
+                updated = _PROJECT_VERSION_RE.sub(rf"\g<1>{new_version}\g<3>", updated, count=1)
+            if updated != original:
+                path.write_text(updated, encoding="utf-8")
+                print(f"{_distribution_name(updated)}: updated")
+        print(f"\n{package} -> {new_version}")
+        return
+
+    pin_re = _pin_re(names)
     for path in manifests:
         original = path.read_text(encoding="utf-8")
         updated = _rewrite(original, new_version, pin_re)
@@ -110,20 +131,14 @@ def check() -> int:
         name = _distribution_name(text)
         versions[name] = _declared_version(text)
 
-    distinct = set(versions.values())
-    if len(distinct) > 1:
-        problems.append(f"packages disagree on the version: {sorted(distinct)}")
-        for name, version in sorted(versions.items()):
-            problems.append(f"  {name} = {version}")
-
-    expected = next(iter(distinct)) if len(distinct) == 1 else None
 
     for path in manifests:
         text = path.read_text(encoding="utf-8")
         name = _distribution_name(text)
         for dependency, pinned in pin_re.findall(text):
-            if expected is not None and pinned != expected:
-                problems.append(f"{name}: pins {dependency}=={pinned}, expected =={expected}")
+            declared = versions.get(dependency)
+            if declared is not None and pinned != declared:
+                problems.append(f"{name}: pins {dependency}=={pinned}, but {dependency} declares {declared}")
 
         # An unpinned internal dependency is the dangerous case: `Requires-Dist`
         # leaves this workspace without `[tool.uv.sources]`, so anything not
@@ -148,7 +163,8 @@ def check() -> int:
             print(f"  {problem}", file=sys.stderr)
         return 1
 
-    print(f"version check passed: {len(manifests)} packages at {expected}, all internal deps pinned")
+    summary = ", ".join(f"{name} {version}" for name, version in sorted(versions.items()))
+    print(f"version check passed: every internal pin matches its package ({summary})")
     return 0
 
 
@@ -156,13 +172,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("version", nargs="?", help="the new version, e.g. 0.2.0")
     parser.add_argument("--check", action="store_true", help="verify agreement instead of rewriting")
+    parser.add_argument("--package", help="bump only this distribution, and every pin on it")
     args = parser.parse_args()
 
     if args.check:
         return check()
     if not args.version:
         parser.error("provide a version, or --check")
-    set_version(args.version)
+    set_version(args.version, args.package)
     return 0
 
 

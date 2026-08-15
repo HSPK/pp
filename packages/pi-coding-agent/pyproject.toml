@@ -26,7 +26,7 @@ classifiers = [
 dependencies = [
     "pp-ai==0.1.0",
     "pp-agent-core==0.1.0",
-    "pp-tui==0.1.0",
+    "pp-tui==0.1.1",
     "pp-rpc-protocol==0.1.0",
     "pp-rpc-client==0.1.0",
     "pp-rpc-server==0.1.0",
