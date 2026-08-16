@@ -625,7 +625,7 @@ wheels = [
 
 [[package]]
 name = "pp-agent-core"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/pi-agent" }
 dependencies = [
     { name = "pp-ai" },
@@ -642,7 +642,7 @@ requires-dist = [
 
 [[package]]
 name = "pp-ai"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/pi-ai" }
 dependencies = [
     { name = "httpx" },
@@ -659,7 +659,7 @@ requires-dist = [
 
 [[package]]
 name = "pp-coding-agent"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/pi-coding-agent" }
 dependencies = [
     { name = "jsonschema" },
@@ -692,7 +692,7 @@ requires-dist = [
 
 [[package]]
 name = "pp-evals"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/pi-evals" }
 dependencies = [
     { name = "pp-agent-core" },
@@ -760,7 +760,7 @@ dev = [
 
 [[package]]
 name = "pp-rpc-client"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/pi-client" }
 dependencies = [
     { name = "pp-rpc-protocol" },
@@ -782,7 +782,7 @@ requires-dist = [{ name = "jsonschema", specifier = ">=4.23" }]
 
 [[package]]
 name = "pp-rpc-server"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/pi-server" }
 dependencies = [
     { name = "pp-agent-core" },

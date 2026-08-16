@@ -1,11 +1,26 @@
 #!/usr/bin/env python3
 """Set or check versions and the internal pins that follow them.
 
-Every internal dependency is pinned to `==<version>` rather than a range. That
-pin is not stylistic: `[tool.uv.sources]` entries do not survive into a built
-wheel, so an unpinned `pp-ai` in `Requires-Dist` would be resolved from PyPI at
-install time, and a cross-version combination of these packages has never been
-tested together.
+Every internal dependency is constrained to `~=<major>.<minor>.0`, which admits
+any later patch in the same minor series and nothing else. Some constraint is
+mandatory: `[tool.uv.sources]` entries do not survive into a built wheel, so an
+unconstrained `pp-ai` in `Requires-Dist` would be resolved from PyPI at install
+time and could pick up anything at all.
+
+It used to be `==`, which guaranteed users got exactly the combination CI had
+tested. That guarantee cost too much: a one-line fix in `pp-ai` could not reach
+anyone until all nine packages were re-released, because every dependent pinned
+the old version exactly. `~=` lets a patch flow downstream on its own.
+
+The guarantee is replaced, not abandoned. It now rests on two things, and both
+have to hold:
+
+  * A change to an API another package uses is a *minor* bump, never a patch.
+    `~=0.2.0` will not cross into 0.3.0, so a minor bump stops the flow and
+    forces the dependent to opt in.
+  * Each repository re-resolves its dependencies on a schedule and runs its
+    suite, so a patch that breaks a dependent surfaces on its own rather than
+    waiting for someone to touch that repository.
 
 The nine distributions used to be released in lockstep, all carrying the same
 version. Now that each one lives in its own repository they are released
@@ -17,6 +32,9 @@ packages happen to share a version number is not interesting; whether
     python scripts/set_version.py 0.2.0                  # bump everything
     python scripts/set_version.py 0.1.1 --package pp-tui # bump one, fix its pins
     python scripts/set_version.py --check                # verify, exit 1 if not
+
+A patch bump (0.2.0 -> 0.2.1) leaves every dependent's constraint untouched,
+because `~=0.2.0` already admits it. Only a minor bump rewrites them.
 
 `--check` runs from `check.sh`, so a hand-edited version that only lands in one
 file fails the normal development loop instead of a release.
@@ -66,21 +84,33 @@ def _internal_names(manifests: list[Path]) -> set[str]:
 
 
 def _pin_re(names: set[str]) -> re.Pattern[str]:
-    """Matches `"<internal-dist>==<version>"` for any workspace distribution.
+    """Matches `"<internal-dist>~=<version>"` for any workspace distribution.
 
-    Only `==` pins are rewritten. A third-party requirement such as
-    `"pytest>=8.3"` never matches, because the alternation is built from the
-    workspace's own distribution names.
+    A third-party requirement such as `"pytest>=8.3"` never matches, because
+    the alternation is built from the workspace's own distribution names.
     """
     alternation = "|".join(sorted((re.escape(name) for name in names), key=len, reverse=True))
-    return re.compile(rf'"({alternation})==([^"]+)"')
+    return re.compile(rf'"({alternation})~=([^"]+)"')
+
+
+def _series_floor(version: str) -> str | None:
+    """`0.2.7` -> `0.2.0`, the floor of the minor series it belongs to.
+
+    Returns `None` for anything that is not three dotted parts. `~=0.2` is
+    legal PEP 440 but means something quite different (it admits 0.3 and 0.9),
+    so the caller has to be able to reject it rather than crash on it.
+    """
+    parts = version.split(".")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts[:2]):
+        return None
+    return f"{parts[0]}.{parts[1]}.0"
 
 
 def _rewrite(text: str, new_version: str, pin_re: re.Pattern[str]) -> str:
     # Only the first `version = "..."` is the project version; later ones would
     # belong to other tables, so the replacement count is capped at one.
     text = _PROJECT_VERSION_RE.sub(rf"\g<1>{new_version}\g<3>", text, count=1)
-    return pin_re.sub(rf'"\g<1>=={new_version}"', text)
+    return pin_re.sub(rf'"\g<1>~={_series_floor(new_version)}"', text)
 
 
 def set_version(new_version: str, package: str | None = None) -> None:
@@ -98,7 +128,7 @@ def set_version(new_version: str, package: str | None = None) -> None:
         pin_re = _pin_re({package})
         for path in manifests:
             original = path.read_text(encoding="utf-8")
-            updated = pin_re.sub(rf'"\g<1>=={new_version}"', original)
+            updated = pin_re.sub(rf'"\g<1>~={_series_floor(new_version)}"', original)
             if _distribution_name(original) == package:
                 updated = _PROJECT_VERSION_RE.sub(rf"\g<1>{new_version}\g<3>", updated, count=1)
             if updated != original:
@@ -135,10 +165,24 @@ def check() -> int:
     for path in manifests:
         text = path.read_text(encoding="utf-8")
         name = _distribution_name(text)
-        for dependency, pinned in pin_re.findall(text):
+        for dependency, constraint in pin_re.findall(text):
             declared = versions.get(dependency)
-            if declared is not None and pinned != declared:
-                problems.append(f"{name}: pins {dependency}=={pinned}, but {dependency} declares {declared}")
+            if declared is None:
+                continue
+            # The constraint must be the floor of a minor series (`~=0.2.0`).
+            # `~=0.2` would admit 0.3 and 0.9 too, which is exactly the
+            # crossing this scheme relies on being blocked.
+            floor = _series_floor(constraint)
+            if floor is None or constraint != floor:
+                problems.append(
+                    f"{name}: constrains {dependency}~={constraint}; use a three-part series "
+                    f"floor such as ~={_series_floor(declared)} -- ~=X.Y admits X.Y+1 too"
+                )
+            elif _series_floor(declared) != constraint:
+                problems.append(
+                    f"{name}: constrains {dependency}~={constraint}, but {dependency} declares "
+                    f"{declared}, which that constraint does not admit"
+                )
 
         # An unpinned internal dependency is the dangerous case: `Requires-Dist`
         # leaves this workspace without `[tool.uv.sources]`, so anything not
@@ -154,8 +198,11 @@ def check() -> int:
 
         for requirement in published:
             requirement_name = re.split(r"[<>=!~\[; ]", requirement, maxsplit=1)[0].strip()
-            if requirement_name in names and f"{requirement_name}==" not in requirement:
-                problems.append(f"{name}: depends on {requirement_name} without an == pin")
+            if requirement_name in names and f"{requirement_name}~=" not in requirement:
+                problems.append(
+                    f"{name}: depends on {requirement_name} without a ~= constraint; "
+                    "an unconstrained sibling is resolved from PyPI at install time"
+                )
 
     if problems:
         print("version check failed:", file=sys.stderr)
@@ -164,7 +211,7 @@ def check() -> int:
         return 1
 
     summary = ", ".join(f"{name} {version}" for name, version in sorted(versions.items()))
-    print(f"version check passed: every internal pin matches its package ({summary})")
+    print(f"version check passed: every internal constraint admits its package ({summary})")
     return 0
 
 
