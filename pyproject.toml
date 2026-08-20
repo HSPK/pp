@@ -1,6 +1,6 @@
 [project]
 name = "pp-coding-agent"
-version = "0.2.1"
+version = "0.2.2"
 description = "Coding agent CLI with read, bash, edit, write tools and session management (Python port of @earendil-works/pi-coding-agent)"
 readme = "README.md"
 license = "MIT"
