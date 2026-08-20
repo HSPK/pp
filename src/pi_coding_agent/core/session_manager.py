@@ -490,7 +490,13 @@ def _message_from_raw(raw: dict[str, Any]) -> HarnessMessage:
             if block_type == "text":
                 content.append(TextContent(text=block.get("text", "")))
             elif block_type == "thinking":
-                content.append(ThinkingContent(thinking=block.get("thinking", ""), signature=block.get("signature")))
+                content.append(
+                    ThinkingContent(
+                        thinking=block.get("thinking", ""),
+                        thinking_signature=block.get("thinkingSignature"),
+                        redacted=block.get("redacted"),
+                    )
+                )
             elif block_type == "toolCall":
                 content.append(
                     ToolCall(id=block.get("id", ""), name=block.get("name", ""), arguments=block.get("arguments", {}))
@@ -720,7 +726,14 @@ def _message_to_raw(message: HarnessMessage) -> dict[str, Any]:
             if block_type == "text":
                 content.append({"type": "text", "text": block.text})
             elif block_type == "thinking":
-                content.append({"type": "thinking", "thinking": block.thinking, "signature": block.signature})
+                content.append(
+                    {
+                        "type": "thinking",
+                        "thinking": block.thinking,
+                        "thinkingSignature": block.thinking_signature,
+                        "redacted": block.redacted,
+                    }
+                )
             elif block_type == "toolCall":
                 content.append({"type": "toolCall", "id": block.id, "name": block.name, "arguments": block.arguments})
         return {
